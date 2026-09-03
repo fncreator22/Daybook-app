@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Release signing material must never be committed.
+keystore.properties
+*.jks
+*.keystore
+
+# Locally built APKs handed over by build-apk.
+/Daybook-*.apk
