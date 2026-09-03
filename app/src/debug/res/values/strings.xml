@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only overrides. The debug variant merges this over src/main/res, so
+  only debug builds see it; release builds keep the name in src/main.
+
+  The debug build already installs under its own application id
+  (com.sr2ma.daybook.debug, from applicationIdSuffix), so it can sit next to a
+  release copy. Without this the two would be indistinguishable on the launcher:
+  same name, same icon. Renaming the debug one is the cheaper half of that fix.
+-->
+<resources>
+    <string name="app_name">Daybook (debug)</string>
+</resources>

@@ -1,0 +1,85 @@
+# Builds an installable debug APK in the cloud, so nothing has to be installed
+# on your PC. Push this repository to GitHub, open the Actions tab, run
+# "Build debug APK", then download the daybook-debug-apk artifact.
+#
+# The APK is signed with Android's standard debug key. That is enough to install
+# and use it on your own phone; it is not enough to publish to Google Play.
+name: Build debug APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Assemble debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v4
+
+      # AGP 8.13 and Kotlin 2.2 both require JDK 17.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Puts the Android SDK on PATH and accepts the SDK licences.
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Best effort only. The runner image already ships several platforms, and
+      # AGP downloads whatever else it needs, so a miss here must not fail the
+      # build.
+      - name: Pre-install the compile SDK
+        continue-on-error: true
+        run: sdkmanager --install "platforms;android-36"
+
+      # This project intentionally has no gradle-wrapper.jar committed, so
+      # Gradle is provisioned here instead. The version matches
+      # gradle/wrapper/gradle-wrapper.properties.
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      # Assembling comes before testing on purpose: a failing test should still
+      # leave you with an APK you can install and look at.
+      - name: Assemble the debug APK
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: daybook-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Run unit tests
+        id: tests
+        continue-on-error: true
+        run: gradle --no-daemon testDebugUnitTest
+
+      - name: Upload the test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daybook-test-report
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Fail the run if the tests failed
+        if: steps.tests.outcome == 'failure'
+        run: |
+          echo "The APK was built and uploaded, but unit tests failed."
+          echo "Download the daybook-test-report artifact for details."
+          exit 1

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only what the XML theme needs before Compose takes over. The real
+         palette lives in ui/theme/Color.kt. -->
+    <color name="daybook_paper">#FBFAF8</color>
+    <color name="transparent">#00000000</color>
+</resources>

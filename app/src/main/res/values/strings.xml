@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Daybook</string>
+
+    <!-- Navigation -->
+    <string name="nav_today">Today</string>
+    <string name="nav_tasks">Tasks</string>
+    <string name="nav_log">Log</string>
+    <string name="nav_meetings">Meetings</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Shared actions -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_more">More options</string>
+    <string name="action_ok">OK</string>
+
+    <!-- Shared field errors -->
+    <string name="error_title_required">A title is required</string>
+
+    <!-- Storage failures. Rare, but a full or locked database must not be silent. -->
+    <string name="error_load_failed">Could not open your Daybook data</string>
+    <string name="error_save_failed">Could not save that change</string>
+    <string name="error_delete_failed">Could not delete that</string>
+
+    <!-- Today -->
+    <string name="today_quick_add_hint">Add a task for today…</string>
+    <string name="today_section_overdue">Overdue</string>
+    <string name="today_section_due_today">Due today</string>
+    <string name="today_section_in_progress">In progress</string>
+    <string name="today_section_meetings">Today\'s meetings</string>
+    <string name="today_section_follow_ups">Follow-ups due</string>
+    <string name="today_section_log">Today\'s log</string>
+    <string name="today_empty_title">Your day is clear</string>
+    <string name="today_empty_body">Add a task above, or open the Log tab to write down what you are working on.</string>
+    <string name="today_add_log_entry">Add to today\'s log</string>
+    <string name="today_completed_count">%1$d done today</string>
+
+    <!-- Tasks -->
+    <string name="tasks_title">Tasks</string>
+    <string name="tasks_filter_all">All</string>
+    <string name="tasks_filter_open">Open</string>
+    <string name="tasks_filter_today">Today</string>
+    <string name="tasks_filter_overdue">Overdue</string>
+    <string name="tasks_filter_done">Done</string>
+    <string name="tasks_sort_priority">Priority</string>
+    <string name="tasks_sort_due">Due date</string>
+    <string name="tasks_sort_newest">Newest</string>
+    <string name="tasks_sort_label">Sort by</string>
+    <string name="tasks_group_by_project">Group by project</string>
+    <string name="tasks_search_hint">Search tasks</string>
+    <string name="tasks_all_projects">All projects</string>
+    <string name="tasks_empty_title">No tasks here</string>
+    <string name="tasks_empty_body">Nothing matches this filter yet.</string>
+    <string name="tasks_new">New task</string>
+    <string name="tasks_edit">Edit task</string>
+    <string name="tasks_field_title">Title</string>
+    <string name="tasks_field_notes">Notes</string>
+    <string name="tasks_field_priority">Priority</string>
+    <string name="tasks_field_status">Status</string>
+    <string name="tasks_field_due">Due date</string>
+    <string name="tasks_field_project">Project</string>
+    <string name="tasks_field_project_hint">e.g. Onboarding</string>
+    <string name="tasks_field_project_recent">Projects you already use</string>
+    <string name="tasks_from_meeting">From meeting: %1$s</string>
+    <string name="tasks_delete_confirm_title">Delete this task?</string>
+    <string name="tasks_delete_confirm_body">This cannot be undone.</string>
+    <string name="tasks_no_project">Unfiled</string>
+    <string name="tasks_completed_on">Completed %1$s</string>
+    <string name="tasks_mark_complete">Mark complete</string>
+    <string name="tasks_mark_incomplete">Mark not complete</string>
+
+    <!-- Priorities -->
+    <string name="priority_low">Low</string>
+    <string name="priority_medium">Medium</string>
+    <string name="priority_high">High</string>
+    <string name="priority_urgent">Urgent</string>
+
+    <!-- Statuses -->
+    <string name="status_open">Open</string>
+    <string name="status_in_progress">In progress</string>
+    <string name="status_done">Done</string>
+    <string name="status_cancelled">Cancelled</string>
+
+    <!-- Log -->
+    <string name="log_title">Daily log</string>
+    <string name="log_new">New log entry</string>
+    <string name="log_edit">Edit log entry</string>
+    <string name="log_field_body">What happened?</string>
+    <string name="log_field_body_hint">Shipped the export flow, blocked on API keys…</string>
+    <string name="log_field_kind">Kind</string>
+    <string name="log_field_day">Day</string>
+    <string name="log_body_required">Write something first</string>
+    <string name="log_empty_title">No log entries yet</string>
+    <string name="log_empty_body">Jot down what you worked on, what you decided, and what blocked you. Future you will thank you at the next standup.</string>
+    <string name="log_delete_confirm_title">Delete this entry?</string>
+    <string name="log_delete_confirm_body">This cannot be undone.</string>
+    <string name="log_filter_all_kinds">All kinds</string>
+    <string name="log_search_hint">Search the log</string>
+
+    <!-- Log kinds -->
+    <string name="kind_note">Note</string>
+    <string name="kind_decision">Decision</string>
+    <string name="kind_blocker">Blocker</string>
+    <string name="kind_win">Win</string>
+
+    <!-- Meetings -->
+    <string name="meetings_title">Meetings</string>
+    <string name="meetings_filter_upcoming">Upcoming</string>
+    <string name="meetings_filter_past">Past</string>
+    <string name="meetings_filter_follow_up">Needs follow-up</string>
+    <string name="meetings_search_hint">Search meetings</string>
+    <string name="meetings_new">New meeting</string>
+    <string name="meetings_edit">Edit meeting</string>
+    <string name="meetings_field_title">Title</string>
+    <string name="meetings_field_attendees">Attendees</string>
+    <string name="meetings_field_attendees_hint">Comma separated</string>
+    <string name="meetings_field_day">Date</string>
+    <string name="meetings_field_time">Time</string>
+    <string name="meetings_field_location">Location</string>
+    <string name="meetings_field_location_hint">Room, call link, or place</string>
+    <string name="meetings_field_notes">Notes</string>
+    <string name="meetings_field_next_touch">Next touch</string>
+    <string name="meetings_empty_title">No meetings here</string>
+    <string name="meetings_empty_body">Add a meeting to keep its notes and action items together.</string>
+    <string name="meetings_delete_confirm_title">Delete this meeting?</string>
+    <string name="meetings_delete_confirm_body">Its action items become standalone tasks. This cannot be undone.</string>
+    <string name="meetings_action_items">Action items</string>
+    <string name="meetings_add_action_item">Add action item</string>
+    <string name="meetings_action_item_hint">What did you commit to?</string>
+    <string name="meetings_no_action_items">No action items captured.</string>
+    <string name="meetings_action_items_after_save">Save the meeting first, then action items can be attached to it.</string>
+    <string name="meetings_follow_up_done">Follow-up done</string>
+    <string name="meetings_mark_follow_up_done">Mark follow-up done</string>
+    <string name="meetings_reopen_follow_up">Reopen follow-up</string>
+    <string name="meetings_follow_up_due">Follow up %1$s</string>
+    <string name="meetings_attendee_count">%1$d attending</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_backup">Backup</string>
+    <string name="settings_export">Export a backup</string>
+    <string name="settings_export_body">Writes every task, log entry and meeting to a single JSON file you choose.</string>
+    <string name="settings_import">Import a backup</string>
+    <string name="settings_import_body">Reads a Daybook JSON file back in.</string>
+    <string name="settings_import_mode_title">How should this import work?</string>
+    <string name="settings_import_merge">Merge</string>
+    <string name="settings_import_merge_body">Adds everything from the file alongside what you already have.</string>
+    <string name="settings_import_replace">Replace</string>
+    <string name="settings_import_replace_body">Deletes all current data first, then imports. This cannot be undone.</string>
+    <string name="settings_section_data">Your data</string>
+    <string name="settings_stat_tasks">Tasks</string>
+    <string name="settings_stat_log_entries">Log entries</string>
+    <string name="settings_stat_meetings">Meetings</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_privacy_body">Daybook asks for no permissions and has no internet access. Everything lives in this app\'s private storage on this device. Backups only leave the app when you explicitly export one.</string>
+    <string name="settings_export_success">Backup saved</string>
+    <string name="settings_export_failure">Could not save the backup</string>
+    <string name="settings_import_success">Imported %1$d tasks, %2$d log entries, %3$d meetings</string>
+    <string name="settings_import_failure">Could not read that file</string>
+    <string name="settings_delete_all">Delete all data</string>
+    <string name="settings_delete_all_body">Removes every task, log entry and meeting from this device.</string>
+    <string name="settings_delete_all_confirm_title">Delete everything?</string>
+    <string name="settings_delete_all_confirm_body">All tasks, log entries and meetings will be removed. Export a backup first if you might want any of it later. This cannot be undone.</string>
+
+    <!-- Date and time helpers -->
+    <string name="date_today">Today</string>
+    <string name="date_tomorrow">Tomorrow</string>
+    <string name="date_yesterday">Yesterday</string>
+    <string name="date_none">No date</string>
+    <string name="date_pick">Pick a date</string>
+    <string name="date_overdue_by">%1$d days late</string>
+    <string name="date_overdue_by_one">1 day late</string>
+    <string name="time_none">No time</string>
+    <string name="time_pick">Pick a time</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_add_task">Add a task</string>
+    <string name="cd_add_log_entry">Add a log entry</string>
+    <string name="cd_add_meeting">Add a meeting</string>
+</resources>

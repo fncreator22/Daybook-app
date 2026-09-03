@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Deliberately a framework theme, not Theme.Material3.*: Daybook has no
+      View-based UI, so it does not depend on the Material Components for
+      Views library. Compose owns all real styling.
+
+      System bar colours are set programmatically by enableEdgeToEdge() in
+      MainActivity, which is the supported path from Android 15 onwards.
+    -->
+    <style name="Theme.Daybook" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/daybook_paper</item>
+        <item name="android:statusBarColor">@color/transparent</item>
+        <item name="android:navigationBarColor">@color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
