@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,10 +11,9 @@ plugins {
 // That file is gitignored and never committed. If it is absent the release
 // build still assembles, it just comes out unsigned, so a fresh clone works.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = java.util.Properties().apply {
-    if (keystorePropertiesFile.exists()) {
-        keystorePropertiesFile.inputStream().use { load(it) }
-    }
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { stream -> keystoreProperties.load(stream) }
 }
 val hasReleaseKeystore = keystoreProperties.getProperty("storeFile") != null
 
