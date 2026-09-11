@@ -13,6 +13,8 @@ data class Task(
     val dueDate: LocalDate? = null,
     val project: String? = null,
     val meetingId: Long? = null,
+    val cadence: Cadence = Cadence.NONE,
+    val cadenceParentId: Long? = null,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
     val completedAt: Long? = null,

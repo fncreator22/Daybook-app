@@ -48,3 +48,31 @@ enum class LogKind(val storedValue: String) {
             entries.firstOrNull { it.storedValue == value } ?: NOTE
     }
 }
+
+/** How often a recurring task repeats. NONE = not recurring. */
+enum class Cadence(val storedValue: String) {
+    NONE("NONE"),
+    DAILY("DAILY"),
+    WEEKLY("WEEKLY"),
+    MONTHLY("MONTHLY"),
+    YEARLY("YEARLY"),
+    ;
+
+    companion object {
+        fun fromStored(value: String?): Cadence =
+            entries.firstOrNull { it.storedValue == value } ?: NONE
+    }
+}
+
+/** Types of proactive suggestions produced by AgentEngine. */
+enum class SuggestionType(val storedValue: String) {
+    STALE_TASK("STALE_TASK"),
+    FOLLOW_UP_DUE("FOLLOW_UP_DUE"),
+    CADENCE_DUE("CADENCE_DUE"),
+    ;
+
+    companion object {
+        fun fromStored(value: String?): SuggestionType? =
+            entries.firstOrNull { it.storedValue == value }
+    }
+}

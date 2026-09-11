@@ -1,0 +1,146 @@
+package com.sr2ma.daybook.domain
+
+import com.sr2ma.daybook.domain.model.LogKind
+import com.sr2ma.daybook.domain.model.Priority
+import com.sr2ma.daybook.domain.model.TaskStatus
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * Tests for NaturalLanguageParser — pure input→output, no I/O.
+ *
+ * Each test follows the "arrange one input, assert one output" pattern used
+ * across the existing domain test suite.
+ */
+class NaturalLanguageParserTest {
+
+    // ── Task capture ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `bare text becomes a task with OPEN status and inferred MEDIUM priority`() {
+        val result = NaturalLanguageParser.parse("send the report to Alice")
+
+        assertEquals(ParsedIntent.CREATE_TASK, result.intent)
+        assertEquals("send the report to Alice", result.taskTitle)
+        assertEquals(Priority.MEDIUM, result.priority)
+        assertEquals(TaskStatus.OPEN, result.status)
+        assertNull(result.dueDate)
+    }
+
+    @Test
+    fun `urgent keyword bumps priority to URGENT`() {
+        val result = NaturalLanguageParser.parse("urgent: fix the login bug")
+
+        assertEquals(ParsedIntent.CREATE_TASK, result.intent)
+        assertEquals(Priority.URGENT, result.priority)
+    }
+
+    @Test
+    fun `important keyword maps to HIGH priority`() {
+        val result = NaturalLanguageParser.parse("important review the contract")
+
+        assertEquals(Priority.HIGH, result.priority)
+    }
+
+    @Test
+    fun `low priority keyword maps to LOW`() {
+        val result = NaturalLanguageParser.parse("low priority: clean up old emails")
+
+        assertEquals(Priority.LOW, result.priority)
+    }
+
+    @Test
+    fun `today keyword sets due date to today`() {
+        val today = java.time.LocalDate.of(2026, 9, 11)
+        val result = NaturalLanguageParser.parse("finish the deck today", referenceDate = today)
+
+        assertEquals(today, result.dueDate)
+    }
+
+    @Test
+    fun `tomorrow keyword sets due date to next day`() {
+        val today = java.time.LocalDate.of(2026, 9, 11)
+        val result = NaturalLanguageParser.parse("call James tomorrow", referenceDate = today)
+
+        assertEquals(today.plusDays(1), result.dueDate)
+    }
+
+    @Test
+    fun `next week keyword sets due date 7 days out`() {
+        val today = java.time.LocalDate.of(2026, 9, 11)
+        val result = NaturalLanguageParser.parse("submit invoice next week", referenceDate = today)
+
+        assertEquals(today.plusDays(7), result.dueDate)
+    }
+
+    // ── Log entry capture ─────────────────────────────────────────────────────
+
+    @Test
+    fun `note: prefix routes to CREATE_LOG with NOTE kind`() {
+        val result = NaturalLanguageParser.parse("note: discussed pricing with the team")
+
+        assertEquals(ParsedIntent.CREATE_LOG, result.intent)
+        assertEquals(LogKind.NOTE, result.logKind)
+        assertEquals("discussed pricing with the team", result.logBody)
+    }
+
+    @Test
+    fun `decided keyword routes to CREATE_LOG with DECISION kind`() {
+        val result = NaturalLanguageParser.parse("decided to go with option B")
+
+        assertEquals(ParsedIntent.CREATE_LOG, result.intent)
+        assertEquals(LogKind.DECISION, result.logKind)
+    }
+
+    @Test
+    fun `blocked on prefix routes to CREATE_LOG with BLOCKER kind`() {
+        val result = NaturalLanguageParser.parse("blocked on waiting for legal sign-off")
+
+        assertEquals(ParsedIntent.CREATE_LOG, result.intent)
+        assertEquals(LogKind.BLOCKER, result.logKind)
+    }
+
+    @Test
+    fun `win: prefix routes to CREATE_LOG with WIN kind`() {
+        val result = NaturalLanguageParser.parse("win: closed the enterprise deal")
+
+        assertEquals(ParsedIntent.CREATE_LOG, result.intent)
+        assertEquals(LogKind.WIN, result.logKind)
+    }
+
+    // ── Meeting capture ───────────────────────────────────────────────────────
+
+    @Test
+    fun `meeting with keyword routes to CREATE_MEETING`() {
+        val result = NaturalLanguageParser.parse("meeting with Alice tomorrow at 10am")
+
+        assertEquals(ParsedIntent.CREATE_MEETING, result.intent)
+        assertTrue(result.meetingAttendees.contains("Alice"))
+    }
+
+    @Test
+    fun `call with keyword routes to CREATE_MEETING`() {
+        val result = NaturalLanguageParser.parse("call with the design team at 3pm")
+
+        assertEquals(ParsedIntent.CREATE_MEETING, result.intent)
+    }
+
+    // ── Edge cases ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `empty input returns UNKNOWN intent`() {
+        val result = NaturalLanguageParser.parse("   ")
+
+        assertEquals(ParsedIntent.UNKNOWN, result.intent)
+    }
+
+    @Test
+    fun `parse is case-insensitive for keywords`() {
+        val result = NaturalLanguageParser.parse("URGENT: Review the PR")
+
+        assertEquals(Priority.URGENT, result.priority)
+        assertEquals(ParsedIntent.CREATE_TASK, result.intent)
+    }
+}
