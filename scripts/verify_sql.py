@@ -68,7 +68,19 @@ def sql_literals(path: Path) -> list[str]:
 
 def main() -> int:
     print("== 1. schema ==")
-    schema = [s for s in sql_literals(DB_FILE) if s.upper().startswith("CREATE")]
+    # Extract only the SCHEMA val block — stop before MIGRATIONS_ constants.
+    raw = DB_FILE.read_text(encoding="utf-8")
+    # Find the SCHEMA listOf( ... ) block up to the line before MIGRATIONS_V2
+    migrations_pos = raw.find("val MIGRATIONS_V2")
+    schema_region = raw[:migrations_pos] if migrations_pos != -1 else raw
+    schema_match = re.search(r'val SCHEMA[^=]*=\s*listOf\((.*)\)', schema_region, re.DOTALL)
+    schema_block = schema_match.group(1) if schema_match else schema_region
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False, encoding='utf-8') as tmp:
+        tmp.write(schema_block)
+        tmp_path = Path(tmp.name)
+    schema = [s for s in sql_literals(tmp_path) if s.upper().startswith("CREATE")]
+    os.unlink(tmp_path)
     check("schema statements were extracted", len(schema) >= 9, f"found {len(schema)}")
 
     connection = sqlite3.connect(":memory:")
@@ -87,12 +99,12 @@ def main() -> int:
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
         )
     }
-    check("tables created", tables == {"meetings", "tasks", "log_entries"}, str(sorted(tables)))
+    check("tables created", tables == {"meetings", "tasks", "log_entries", "passes"}, str(sorted(tables)))
 
     indices = {
         row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
     }
-    check("six named indices exist", len([i for i in indices if i.startswith("idx_")]) == 6, str(sorted(indices)))
+    check("eight named indices exist", len([i for i in indices if i.startswith("idx_")]) == 8, str(sorted(indices)))
 
     print("\n== 2. DAO queries ==")
     for dao in sorted(DAO_DIR.glob("*.kt")):
