@@ -104,4 +104,18 @@ dependencies {
     // implementation has to be on the test classpath for BackupCodec tests.
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // ML Kit — bundled (offline). DO NOT use play-services-mlkit-* variants.
+    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.text.recognition)
+
+    // CameraX
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+    implementation(libs.camerax.mlkit)
+
+    // WorkManager (nightly agent, sync workers)
+    implementation(libs.workmanager.ktx)
 }

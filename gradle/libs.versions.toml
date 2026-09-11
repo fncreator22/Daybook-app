@@ -13,6 +13,16 @@ composeBom = "2025.09.00"
 # lifecycle-runtime-ktx, so the version is visible and pinned in one place.
 coroutines = "1.9.0"
 
+# ML Kit — bundled variants (offline, no Play Services dependency)
+mlkitBarcode = "17.3.0"
+mlkitTextRecognition = "16.0.1"
+
+# CameraX 1.6.x (CameraPipe backend; use MlKitAnalyzer bridge)
+camerax = "1.6.2"
+
+# WorkManager for background jobs (nightly agent, sync)
+workManager = "2.9.1"
+
 # Test only
 junit = "4.13.2"
 orgJson = "20240303"
@@ -36,6 +46,20 @@ androidx-compose-foundation = { group = "androidx.compose.foundation", name = "f
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+
+# ML Kit — bundled (offline, not play-services-mlkit-*)
+mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+
+# CameraX
+camerax-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+camerax-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+camerax-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+camerax-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+camerax-mlkit = { group = "androidx.camera", name = "camera-mlkit-vision", version.ref = "camerax" }
+
+# WorkManager
+workmanager-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 # Android stubs org.json in unit tests, so the real implementation is needed on the test classpath.

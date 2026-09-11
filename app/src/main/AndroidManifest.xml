@@ -7,7 +7,13 @@
       goes through the Storage Access Framework, which grants per-file access
       without a storage permission. There is no INTERNET permission, so the
       app is provably incapable of sending your data anywhere.
+
+      CAMERA: used only by the barcode wallet scanner (Phase 2). Requested
+      at runtime when the user first opens the Wallet scan screen.
     -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
 
     <application
         android:name=".DaybookApplication"
