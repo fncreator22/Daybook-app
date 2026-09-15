@@ -63,3 +63,25 @@ data class Meeting(
     fun needsFollowUpBy(day: LocalDate): Boolean =
         !followUpDone && nextTouch != null && !nextTouch.isAfter(day)
 }
+
+/**
+ * A digitised physical card or ticket with a machine-readable barcode (ADR-0002).
+ * If ML Kit found no barcode, the item is a Document (separate table, Phase 2+).
+ *
+ * [barcodeValue] and [barcodeFormat] are the raw decoded barcode — they are always
+ * present; nullable fields are optional metadata added by the user.
+ */
+data class Pass(
+    val id: Long = 0L,
+    val title: String,
+    val category: PassCategory = PassCategory.OTHER,
+    val barcodeValue: String,
+    val barcodeFormat: String,
+    val ocrText: String = "",
+    val notes: String = "",
+    val expiryDate: LocalDate? = null,
+    val balance: String? = null,
+    val imagePath: String? = null,
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+)

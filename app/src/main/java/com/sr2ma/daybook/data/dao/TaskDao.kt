@@ -10,6 +10,7 @@ import com.sr2ma.daybook.data.reqInt
 import com.sr2ma.daybook.data.reqLong
 import com.sr2ma.daybook.data.reqString
 import com.sr2ma.daybook.domain.Dates
+import com.sr2ma.daybook.domain.model.Cadence
 import com.sr2ma.daybook.domain.model.Priority
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.TaskStatus
@@ -70,6 +71,8 @@ class TaskDao(private val helper: DaybookDatabase) {
         put("due_date", Dates.store(dueDate))
         put("project", project?.takeIf { it.isNotBlank() })
         put("meeting_id", meetingId)
+        put("cadence", cadence.storedValue)
+        put("cadence_parent_id", cadenceParentId)
         put("created_at", createdAt)
         put("updated_at", updatedAt)
         put("completed_at", completedAt)
@@ -84,6 +87,8 @@ class TaskDao(private val helper: DaybookDatabase) {
         dueDate = Dates.parseDate(cursor.optString("due_date")),
         project = cursor.optString("project"),
         meetingId = cursor.optLong("meeting_id"),
+        cadence = Cadence.fromStored(cursor.optString("cadence")),
+        cadenceParentId = cursor.optLong("cadence_parent_id"),
         createdAt = cursor.reqLong("created_at"),
         updatedAt = cursor.reqLong("updated_at"),
         completedAt = cursor.optLong("completed_at"),

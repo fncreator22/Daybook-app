@@ -76,3 +76,20 @@ enum class SuggestionType(val storedValue: String) {
             entries.firstOrNull { it.storedValue == value }
     }
 }
+
+/** Category of a Pass in the barcode wallet (ADR-0002). */
+enum class PassCategory(val storedValue: String) {
+    LOYALTY_CARD("LOYALTY_CARD"),
+    EVENT_TICKET("EVENT_TICKET"),
+    TRANSPORT("TRANSPORT"),
+    GIFT_CARD("GIFT_CARD"),
+    ID("ID"),
+    HEALTH("HEALTH"),
+    OTHER("OTHER"),
+    ;
+
+    companion object {
+        fun fromStored(value: String?): PassCategory =
+            entries.firstOrNull { it.storedValue == value } ?: OTHER
+    }
+}
