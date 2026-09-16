@@ -8,6 +8,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,7 +46,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -152,7 +155,13 @@ fun DaybookApp(viewModel: DaybookViewModel) {
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) {
+        if (granted) viewModel.startListening()
+    }
+
+    fun launchMic() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        } else {
             viewModel.startListening()
         }
     }
@@ -171,7 +180,12 @@ fun DaybookApp(viewModel: DaybookViewModel) {
         }
     }
 
-    // Show result sheet when recognition completes.
+    // Listening overlay — shown while mic is active, with a Stop button.
+    if (state.isListening) {
+        ListeningSheet(onStop = viewModel::onVoiceNoMatch)
+    }
+
+    // Confirmation sheet shown after recognition completes.
     if (state.voiceResult != null) {
         VoiceResultSheet(
             result = state.voiceResult!!,
@@ -184,16 +198,15 @@ fun DaybookApp(viewModel: DaybookViewModel) {
         Scaffold(
             bottomBar = { DaybookNavigationBar(selected = state.tab, onSelect = viewModel::selectTab) },
             floatingActionButton = {
-                VoiceAgentButton(
-                    isListening = state.isListening,
-                    onTap = {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                        } else {
-                            viewModel.startListening()
-                        }
-                    },
-                )
+                // Two FABs stacked: per-tab add (top) + voice mic (bottom / primary).
+                Column(horizontalAlignment = Alignment.End) {
+                    AddButton(tab = state.tab, viewModel = viewModel)
+                    Spacer(Modifier.height(12.dp))
+                    VoiceAgentButton(
+                        isListening = state.isListening,
+                        onTap = ::launchMic,
+                    )
+                }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
@@ -319,34 +332,80 @@ private fun DaybookNavigationBar(
 /**
  * The add button, which adds whatever the current tab is about.
  *
- * One button that means different things beats four buttons, because the thing
- * you want to add is almost always the thing you are already looking at. Settings
- * has nothing to add, so on that tab there is no button at all.
+ * Wallet tab shows a two-option dialog: scan barcode or add manually.
+ * Settings has nothing to add, so on that tab there is no button at all.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddButton(tab: DaybookTab, viewModel: DaybookViewModel) {
+    if (tab == DaybookTab.SETTINGS) return
+
+    if (tab == DaybookTab.WALLET) {
+        WalletAddMenu(viewModel)
+        return
+    }
+
     // Each branch is parenthesised because bare braces after `->` would be read as
     // a block, whose value is Unit, rather than as the lambda this needs.
     val action: () -> Unit = when (tab) {
-        DaybookTab.TODAY -> ({ viewModel.newTask(dueToday = true) })
-        DaybookTab.TASKS -> ({ viewModel.newTask() })
-        DaybookTab.LOG -> ({ viewModel.newLogEntry() })
+        DaybookTab.TODAY    -> ({ viewModel.newTask(dueToday = true) })
+        DaybookTab.TASKS    -> ({ viewModel.newTask() })
+        DaybookTab.LOG      -> ({ viewModel.newLogEntry() })
         DaybookTab.MEETINGS -> ({ viewModel.newMeeting() })
-        DaybookTab.WALLET -> ({ viewModel.openWalletScanner() })
-        DaybookTab.SETTINGS -> null
-    } ?: return
-
-    @StringRes val description = when (tab) {
-        DaybookTab.LOG -> R.string.cd_add_log_entry
-        DaybookTab.MEETINGS -> R.string.cd_add_meeting
-        DaybookTab.WALLET -> R.string.cd_add_pass
-        else -> R.string.cd_add_task
+        else -> return // WALLET + SETTINGS already handled above
     }
 
-    FloatingActionButton(onClick = action) {
+    @StringRes val description = when (tab) {
+        DaybookTab.LOG      -> R.string.cd_add_log_entry
+        DaybookTab.MEETINGS -> R.string.cd_add_meeting
+        else                -> R.string.cd_add_task
+    }
+
+    androidx.compose.material3.SmallFloatingActionButton(onClick = action) {
         Icon(
             painter = painterResource(R.drawable.ic_add),
             contentDescription = stringResource(description),
+        )
+    }
+}
+
+/**
+ * Small FAB for the Wallet tab. Tapping it shows a dialog offering
+ * "Scan barcode" or "Add manually" so no camera is ever forced.
+ */
+@Composable
+private fun WalletAddMenu(viewModel: DaybookViewModel) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    androidx.compose.material3.SmallFloatingActionButton(onClick = { showDialog = true }) {
+        Icon(
+            painter = painterResource(R.drawable.ic_add),
+            contentDescription = stringResource(R.string.cd_add_pass),
+        )
+    }
+
+    if (showDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(stringResource(R.string.cd_add_pass)) },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        showDialog = false
+                        viewModel.openWalletScanner()
+                    }) { Text(stringResource(R.string.wallet_add_scan)) }
+                    TextButton(onClick = {
+                        showDialog = false
+                        viewModel.newPassManual()
+                    }) { Text(stringResource(R.string.wallet_add_manual)) }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
         )
     }
 }
@@ -368,33 +427,19 @@ private fun LoadingGate(modifier: Modifier = Modifier) {
 }
 
 /**
- * Floating mic button. Pulses while the recognizer is listening.
- * Replaces the per-tab Add button — the Add button is now inside each screen.
+ * Floating mic button. Tapping it starts the voice agent.
+ * While listening, the [ListeningSheet] handles the UX — this button
+ * just changes colour to indicate active state.
  */
 @Composable
 private fun VoiceAgentButton(
     isListening: Boolean,
     onTap: () -> Unit,
 ) {
-    val scale by if (isListening) {
-        rememberInfiniteTransition(label = "mic_pulse").animateFloat(
-            initialValue = 1f,
-            targetValue = 1.18f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(600),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "mic_scale",
-        )
-    } else {
-        remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
-    }
-
     FloatingActionButton(
         onClick = onTap,
         containerColor = if (isListening) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.scale(scale),
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_mic),
@@ -404,6 +449,69 @@ private fun VoiceAgentButton(
         )
     }
 }
+
+/**
+ * Full-screen overlay shown while the mic is actively listening.
+ *
+ * Shows animated wave dots, a "Listening…" label, and a Stop button
+ * so the user can cancel at any time.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ListeningSheet(onStop: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Three dots bounce with staggered timing to suggest a waveform.
+    val infiniteTransition = rememberInfiniteTransition(label = "wave")
+    val dot0 by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = -14f,
+        animationSpec = infiniteRepeatable(tween(380), RepeatMode.Reverse),
+        label = "d0",
+    )
+    val dot1 by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = -14f,
+        animationSpec = infiniteRepeatable(tween(380, delayMillis = 120), RepeatMode.Reverse),
+        label = "d1",
+    )
+    val dot2 by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = -14f,
+        animationSpec = infiniteRepeatable(tween(380, delayMillis = 240), RepeatMode.Reverse),
+        label = "d2",
+    )
+
+    val dotColor = MaterialTheme.colorScheme.primary
+
+    ModalBottomSheet(onDismissRequest = onStop, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = stringResource(R.string.voice_listening),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(28.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf(dot0, dot1, dot2).forEach { yOff ->
+                    Canvas(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .graphicsLayer { translationY = yOff },
+                    ) {
+                        drawCircle(color = dotColor)
+                    }
+                }
+            }
+            Spacer(Modifier.height(32.dp))
+            TextButton(onClick = onStop) { Text(stringResource(R.string.voice_result_dismiss)) }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
 
 /**
  * Bottom sheet shown when a voice recognition result is ready.

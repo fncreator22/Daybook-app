@@ -171,6 +171,14 @@ class DaybookViewModel(
 
     fun editPass(pass: Pass) = update { it.copy(editor = Editor.PassSheet(pass)) }
 
+    /**
+     * Opens a blank pass sheet for manual card entry.
+     * The user fills in all fields by hand — no camera needed.
+     */
+    fun newPassManual() = update {
+        it.copy(editor = Editor.PassSheet(Pass(title = "", barcodeValue = "", barcodeFormat = "")))
+    }
+
     fun savePass(pass: Pass) {
         if (pass.title.isBlank()) return
         write(onSuccess = { it.copy(editor = null) }) { repository.savePass(pass) }

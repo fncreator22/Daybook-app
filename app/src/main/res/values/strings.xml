@@ -235,4 +235,8 @@
     <string name="voice_intent_meeting">Add meeting: %1$s</string>
     <string name="voice_intent_unknown">Create: %1$s</string>
     <string name="voice_saved">Saved</string>
+
+    <!-- Wallet add dialog -->
+    <string name="wallet_add_scan">Scan barcode / QR code</string>
+    <string name="wallet_add_manual">Add manually</string>
 </resources>
