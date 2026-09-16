@@ -20,7 +20,9 @@ import com.sr2ma.daybook.domain.TodayBuilder
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.LogKind
 import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.Task
+import com.sr2ma.daybook.domain.ScanResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,9 +75,9 @@ class DaybookViewModel(
             }
         }
         // Every write refreshes a repository flow, which lands here and re-derives.
-        // Collecting the four flows separately keeps each write cheap: only the
+        // Collecting the flows separately keeps each write cheap: only the
         // list that actually changed is re-read from SQLite by the repository.
-        listOf(repository.tasks, repository.logEntries, repository.meetings, repository.projects)
+        listOf(repository.tasks, repository.logEntries, repository.meetings, repository.projects, repository.passes)
             .forEach { flow ->
                 viewModelScope.launch { flow.collect { update { current -> current } } }
             }
@@ -142,6 +144,41 @@ class DaybookViewModel(
     fun editMeeting(meeting: Meeting) = update { it.copy(editor = Editor.MeetingSheet(meeting)) }
 
     fun closeEditor() = update { it.copy(editor = null) }
+
+    // ---- Wallet ----------------------------------------------------------
+
+    fun openWalletScanner() = update { it.copy(walletScanOpen = true) }
+
+    fun closeWalletScanner() = update { it.copy(walletScanOpen = false) }
+
+    /**
+     * Called when a barcode is decoded by the camera or gallery picker.
+     * Closes the scanner and opens the PassSheet pre-populated with scan data.
+     */
+    fun onScanResult(result: ScanResult) = update {
+        val seed = Pass(
+            title = result.suggestedTitle ?: "",
+            category = result.suggestedCategory,
+            barcodeValue = result.barcodeValue,
+            barcodeFormat = result.barcodeFormat,
+            ocrText = result.ocrText,
+        )
+        it.copy(walletScanOpen = false, editor = Editor.PassSheet(seed))
+    }
+
+    fun editPass(pass: Pass) = update { it.copy(editor = Editor.PassSheet(pass)) }
+
+    fun savePass(pass: Pass) {
+        if (pass.title.isBlank()) return
+        write(onSuccess = { it.copy(editor = null) }) { repository.savePass(pass) }
+    }
+
+    fun deletePass(pass: Pass) {
+        write(
+            failure = R.string.error_delete_failed,
+            onSuccess = { it.copy(editor = null) },
+        ) { repository.deletePass(pass) }
+    }
 
     // ---- Tasks -----------------------------------------------------------
 
@@ -362,6 +399,7 @@ class DaybookViewModel(
             logEntries = logEntries,
             meetings = meetings,
             projects = projects,
+            passes = repository.passes.value,
             taskProject = project,
             board = TodayBuilder.build(tasks, meetings, logEntries, state.today),
             visibleTasks = visibleTasks,

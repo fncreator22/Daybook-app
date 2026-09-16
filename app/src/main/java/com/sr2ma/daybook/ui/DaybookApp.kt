@@ -33,12 +33,14 @@ import com.sr2ma.daybook.R
 import com.sr2ma.daybook.data.BackupCodec
 import com.sr2ma.daybook.ui.editors.LogEditor
 import com.sr2ma.daybook.ui.editors.MeetingEditor
+import com.sr2ma.daybook.ui.editors.PassConfirmSheet
 import com.sr2ma.daybook.ui.editors.TaskEditor
 import com.sr2ma.daybook.ui.screens.LogScreen
 import com.sr2ma.daybook.ui.screens.MeetingsScreen
 import com.sr2ma.daybook.ui.screens.SettingsScreen
 import com.sr2ma.daybook.ui.screens.TasksScreen
 import com.sr2ma.daybook.ui.screens.TodayScreen
+import com.sr2ma.daybook.ui.screens.WalletScreen
 
 /**
  * What the import picker will show.
@@ -147,6 +149,7 @@ fun DaybookApp(viewModel: DaybookViewModel) {
                         DaybookTab.TASKS -> TasksScreen(state, viewModel, content)
                         DaybookTab.LOG -> LogScreen(state, viewModel, content)
                         DaybookTab.MEETINGS -> MeetingsScreen(state, viewModel, content)
+                        DaybookTab.WALLET -> WalletScreen(state, viewModel, content)
                         DaybookTab.SETTINGS -> SettingsScreen(
                             state = state,
                             viewModel = viewModel,
@@ -212,10 +215,17 @@ private fun EditorHost(state: DaybookUiState, viewModel: DaybookViewModel) {
             onAddActionItem = { title -> viewModel.addActionItem(editor.seed.id, title) },
             onToggleActionItem = viewModel::toggleTaskDone,
         )
+
+        is Editor.PassSheet -> PassConfirmSheet(
+            seed = editor.seed,
+            onSave = viewModel::savePass,
+            onDelete = { viewModel.deletePass(editor.seed) },
+            onDismiss = viewModel::closeEditor,
+        )
     }
 }
 
-/** The five destinations, in the order they are worked through in a day. */
+/** The six destinations, in the order they are worked through in a day. */
 @Composable
 private fun DaybookNavigationBar(
     selected: DaybookTab,
@@ -257,12 +267,14 @@ private fun AddButton(tab: DaybookTab, viewModel: DaybookViewModel) {
         DaybookTab.TASKS -> ({ viewModel.newTask() })
         DaybookTab.LOG -> ({ viewModel.newLogEntry() })
         DaybookTab.MEETINGS -> ({ viewModel.newMeeting() })
+        DaybookTab.WALLET -> ({ viewModel.openWalletScanner() })
         DaybookTab.SETTINGS -> null
     } ?: return
 
     @StringRes val description = when (tab) {
         DaybookTab.LOG -> R.string.cd_add_log_entry
         DaybookTab.MEETINGS -> R.string.cd_add_meeting
+        DaybookTab.WALLET -> R.string.cd_add_pass
         else -> R.string.cd_add_task
     }
 

@@ -8,6 +8,7 @@
     <string name="nav_log">Log</string>
     <string name="nav_meetings">Meetings</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_wallet">Wallet</string>
 
     <!-- Shared actions -->
     <string name="action_save">Save</string>
@@ -181,4 +182,40 @@
     <string name="cd_add_task">Add a task</string>
     <string name="cd_add_log_entry">Add a log entry</string>
     <string name="cd_add_meeting">Add a meeting</string>
+    <string name="cd_add_pass">Scan a card or pass</string>
+    <string name="cd_open_gallery">Pick from gallery</string>
+    <string name="cd_switch_camera">Switch camera</string>
+
+    <!-- Wallet -->
+    <string name="wallet_title">Wallet</string>
+    <string name="wallet_empty_title">No cards or passes yet</string>
+    <string name="wallet_empty_body">Tap + to scan a barcode from a loyalty card, ticket, gift card, or ID.</string>
+    <string name="wallet_scan_title">Scan barcode</string>
+    <string name="wallet_gallery_button">Gallery</string>
+    <string name="wallet_confirm_title">Save pass</string>
+    <string name="wallet_confirm_edit_title">Edit pass</string>
+    <string name="wallet_field_title">Name</string>
+    <string name="wallet_field_title_hint">e.g. Coffee Rewards, Boarding Pass</string>
+    <string name="wallet_field_category">Category</string>
+    <string name="wallet_field_notes">Notes</string>
+    <string name="wallet_field_expiry">Expiry</string>
+    <string name="wallet_field_balance">Balance</string>
+    <string name="wallet_delete_confirm_title">Delete this pass?</string>
+    <string name="wallet_delete_confirm_body">This cannot be undone.</string>
+    <string name="wallet_no_barcode">No barcode found in that image.</string>
+    <string name="wallet_barcode_format">Format: %1$s</string>
+
+    <!-- Pass categories -->
+    <string name="pass_cat_loyalty_card">Loyalty card</string>
+    <string name="pass_cat_event_ticket">Event ticket</string>
+    <string name="pass_cat_transport">Transport</string>
+    <string name="pass_cat_gift_card">Gift card</string>
+    <string name="pass_cat_id">ID</string>
+    <string name="pass_cat_health">Health</string>
+    <string name="pass_cat_other">Other</string>
+
+    <!-- Camera permission -->
+    <string name="camera_permission_rationale">Daybook needs camera access to scan barcodes. Your camera feed is processed entirely on-device and never stored or sent anywhere.</string>
+    <string name="camera_permission_denied">Camera access is required to scan barcodes. Please grant it in Settings.</string>
+    <string name="camera_permission_open_settings">Open Settings</string>
 </resources>

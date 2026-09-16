@@ -1,0 +1,159 @@
+package com.sr2ma.daybook.ui.editors
+
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.sr2ma.daybook.R
+import com.sr2ma.daybook.domain.model.Pass
+import com.sr2ma.daybook.domain.model.PassCategory
+
+/**
+ * Full-screen editor that appears after a scan (or when editing a saved pass).
+ *
+ * Per grilling Q3: always shown after scan — user must confirm before saving.
+ * Per grilling Q4: category picker is always visible, pre-selected by heuristic.
+ *
+ * The barcode value and format are not editable — they are the factual record of
+ * what the scanner decoded. The user edits the human-readable metadata only.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PassConfirmSheet(
+    seed: Pass,
+    onSave: (Pass) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var title by rememberSaveable { mutableStateOf(seed.title) }
+    var category by rememberSaveable { mutableStateOf(seed.category) }
+    var notes by rememberSaveable { mutableStateOf(seed.notes) }
+    var balance by rememberSaveable { mutableStateOf(seed.balance ?: "") }
+    var titleError by rememberSaveable { mutableStateOf(false) }
+    var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+
+    val isNew = seed.id == 0L
+    val sheetTitle = stringResource(
+        if (isNew) R.string.wallet_confirm_title else R.string.wallet_confirm_edit_title,
+    )
+
+    EditorScaffold(
+        title = sheetTitle,
+        saveEnabled = true,
+        onSave = {
+            if (title.isBlank()) { titleError = true; return@EditorScaffold }
+            onSave(
+                seed.copy(
+                    title = title.trim(),
+                    category = category,
+                    notes = notes.trim(),
+                    balance = balance.trim().takeIf { it.isNotEmpty() },
+                )
+            )
+        },
+        onDismiss = onDismiss,
+        onDelete = if (isNew) null else ({ showDeleteConfirm = true }),
+    ) {
+        // Name
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it; titleError = false },
+            label = { Text(stringResource(R.string.wallet_field_title)) },
+            placeholder = { Text(stringResource(R.string.wallet_field_title_hint)) },
+            isError = titleError,
+            supportingText = if (titleError) {
+                { Text(stringResource(R.string.error_title_required)) }
+            } else null,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        // Category picker (grilling Q4: always shown, pre-selected by heuristic)
+        Text(
+            text = stringResource(R.string.wallet_field_category),
+            style = MaterialTheme.typography.labelMedium,
+        )
+        FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            PassCategory.entries.forEach { cat ->
+                FilterChip(
+                    selected = category == cat,
+                    onClick = { category = cat },
+                    label = { Text(categoryLabel(cat)) },
+                )
+            }
+        }
+
+        // Balance (optional)
+        OutlinedTextField(
+            value = balance,
+            onValueChange = { balance = it },
+            label = { Text(stringResource(R.string.wallet_field_balance)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+
+        // Notes
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it },
+            label = { Text(stringResource(R.string.wallet_field_notes)) },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+        )
+
+        // Barcode format (read-only info)
+        Text(
+            text = stringResource(R.string.wallet_barcode_format, seed.barcodeFormat),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(stringResource(R.string.wallet_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.wallet_delete_confirm_body)) },
+            confirmButton = {
+                TextButton(onClick = { showDeleteConfirm = false; onDelete() }) {
+                    Text(stringResource(R.string.action_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun categoryLabel(category: PassCategory): String = stringResource(
+    when (category) {
+        PassCategory.LOYALTY_CARD  -> R.string.pass_cat_loyalty_card
+        PassCategory.EVENT_TICKET  -> R.string.pass_cat_event_ticket
+        PassCategory.TRANSPORT     -> R.string.pass_cat_transport
+        PassCategory.GIFT_CARD     -> R.string.pass_cat_gift_card
+        PassCategory.ID            -> R.string.pass_cat_id
+        PassCategory.HEALTH        -> R.string.pass_cat_health
+        PassCategory.OTHER         -> R.string.pass_cat_other
+    },
+)

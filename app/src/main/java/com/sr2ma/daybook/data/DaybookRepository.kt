@@ -2,9 +2,11 @@ package com.sr2ma.daybook.data
 
 import com.sr2ma.daybook.data.dao.LogDao
 import com.sr2ma.daybook.data.dao.MeetingDao
+import com.sr2ma.daybook.data.dao.PassDao
 import com.sr2ma.daybook.data.dao.TaskDao
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.TaskStatus
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,6 +40,7 @@ class DaybookRepository(private val database: DaybookDatabase) {
     private val taskDao = TaskDao(database)
     private val logDao = LogDao(database)
     private val meetingDao = MeetingDao(database)
+    private val passDao = PassDao(database)
 
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
@@ -51,11 +54,15 @@ class DaybookRepository(private val database: DaybookDatabase) {
     private val _projects = MutableStateFlow<List<String>>(emptyList())
     val projects: StateFlow<List<String>> = _projects.asStateFlow()
 
+    private val _passes = MutableStateFlow<List<Pass>>(emptyList())
+    val passes: StateFlow<List<Pass>> = _passes.asStateFlow()
+
     suspend fun refreshAll() = withContext(io) {
         _tasks.value = taskDao.all()
         _logEntries.value = logDao.all()
         _meetings.value = meetingDao.all()
         _projects.value = taskDao.projects()
+        _passes.value = passDao.all()
     }
 
     /**
@@ -250,6 +257,26 @@ class DaybookRepository(private val database: DaybookDatabase) {
             logEntries = logDao.all(),
             meetings = meetingDao.all(),
         )
+    }
+
+    // ---- Passes ----------------------------------------------------------------
+
+    suspend fun savePass(pass: Pass, now: Long = System.currentTimeMillis()): Long =
+        withContext(io) {
+            val stamped = pass.copy(
+                title = pass.title.trim(),
+                notes = pass.notes.trim(),
+                createdAt = if (pass.createdAt == 0L) now else pass.createdAt,
+                updatedAt = now,
+            )
+            val id = passDao.upsert(stamped)
+            _passes.value = passDao.all()
+            id
+        }
+
+    suspend fun deletePass(pass: Pass) = withContext(io) {
+        passDao.delete(pass.id)
+        _passes.value = passDao.all()
     }
 }
 

@@ -12,10 +12,11 @@ import com.sr2ma.daybook.domain.TodayBoard
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.LogKind
 import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.Task
 import java.time.LocalDate
 
-/** The five destinations in the bottom bar. */
+/** The six destinations in the bottom bar. */
 enum class DaybookTab(
     @param:StringRes val labelRes: Int,
     @param:DrawableRes val iconRes: Int,
@@ -24,6 +25,7 @@ enum class DaybookTab(
     TASKS(R.string.nav_tasks, R.drawable.ic_tasks),
     LOG(R.string.nav_log, R.drawable.ic_log),
     MEETINGS(R.string.nav_meetings, R.drawable.ic_meetings),
+    WALLET(R.string.nav_wallet, R.drawable.ic_wallet),
     SETTINGS(R.string.nav_settings, R.drawable.ic_settings),
 }
 
@@ -41,6 +43,9 @@ sealed interface Editor {
     data class LogSheet(val seed: LogEntry) : Editor
 
     data class MeetingSheet(val seed: Meeting) : Editor
+
+    /** [seed] is a Pass pre-populated from a scan, or the existing row for "edit". */
+    data class PassSheet(val seed: Pass) : Editor
 }
 
 /**
@@ -76,6 +81,10 @@ data class DaybookUiState(
     val logEntries: List<LogEntry> = emptyList(),
     val meetings: List<Meeting> = emptyList(),
     val projects: List<String> = emptyList(),
+    val passes: List<Pass> = emptyList(),
+
+    // Wallet screen: true while the camera scanner is showing.
+    val walletScanOpen: Boolean = false,
 
     // Tasks screen controls.
     val taskFilter: TaskFilter = TaskFilter.OPEN,
