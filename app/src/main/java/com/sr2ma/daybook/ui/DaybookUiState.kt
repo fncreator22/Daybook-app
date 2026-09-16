@@ -117,6 +117,15 @@ data class DaybookUiState(
     val editor: Editor? = null,
     val message: UserMessage? = null,
     val busy: Boolean = false,
+
+    // ── Voice agent ───────────────────────────────────────────────────────────
+    /** True while SpeechRecognizer is actively listening. */
+    val isListening: Boolean = false,
+    /**
+     * Non-null when a voice recognition result is waiting for user confirmation.
+     * Shown in [VoiceResultSheet]. The user either confirms (saves) or dismisses.
+     */
+    val voiceResult: VoiceAgentResult? = null,
 ) {
     val taskCount: Int get() = tasks.size
     val logCount: Int get() = logEntries.size

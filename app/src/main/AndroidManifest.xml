@@ -19,6 +19,12 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+      RECORD_AUDIO: used only by the voice agent button (Phase 6).
+      SpeechRecognizer.createOnDeviceSpeechRecognizer() — fully on-device,
+      Android 13+. Audio is never stored or sent anywhere.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
 
     <application

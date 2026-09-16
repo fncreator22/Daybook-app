@@ -3,18 +3,35 @@ package com.sr2ma.daybook.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -26,11 +43,14 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.data.BackupCodec
+import com.sr2ma.daybook.domain.ParsedIntent
 import com.sr2ma.daybook.ui.editors.LogEditor
 import com.sr2ma.daybook.ui.editors.MeetingEditor
 import com.sr2ma.daybook.ui.editors.PassConfirmSheet
@@ -126,10 +146,55 @@ fun DaybookApp(viewModel: DaybookViewModel) {
         }
     }
 
+    // ── Voice agent ─────────────────────────────────────────────────────────
+    val voiceCaptureManager = remember { VoiceCaptureManager(context) }
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            viewModel.startListening()
+        }
+    }
+
+    // Collect the voice flow while isListening == true.
+    LaunchedEffect(state.isListening) {
+        if (state.isListening) {
+            voiceCaptureManager.listen().collect { result ->
+                when (result) {
+                    is VoiceCaptureManager.VoiceResult.Success -> viewModel.onVoiceResult(result.text)
+                    is VoiceCaptureManager.VoiceResult.NoMatch -> viewModel.onVoiceNoMatch()
+                    is VoiceCaptureManager.VoiceResult.Unavailable -> viewModel.onVoiceNoMatch()
+                    is VoiceCaptureManager.VoiceResult.Error -> viewModel.onVoiceNoMatch()
+                }
+            }
+        }
+    }
+
+    // Show result sheet when recognition completes.
+    if (state.voiceResult != null) {
+        VoiceResultSheet(
+            result = state.voiceResult!!,
+            onConfirm = viewModel::confirmVoiceResult,
+            onDismiss = viewModel::dismissVoiceResult,
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = { DaybookNavigationBar(selected = state.tab, onSelect = viewModel::selectTab) },
-            floatingActionButton = { AddButton(tab = state.tab, viewModel = viewModel) },
+            floatingActionButton = {
+                VoiceAgentButton(
+                    isListening = state.isListening,
+                    onTap = {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                        } else {
+                            viewModel.startListening()
+                        }
+                    },
+                )
+            },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
             // The Scaffold's insets are applied once, here, so no screen has to
@@ -299,5 +364,108 @@ private fun LoadingGate(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize(),
     ) {
         CircularProgressIndicator()
+    }
+}
+
+/**
+ * Floating mic button. Pulses while the recognizer is listening.
+ * Replaces the per-tab Add button — the Add button is now inside each screen.
+ */
+@Composable
+private fun VoiceAgentButton(
+    isListening: Boolean,
+    onTap: () -> Unit,
+) {
+    val scale by if (isListening) {
+        rememberInfiniteTransition(label = "mic_pulse").animateFloat(
+            initialValue = 1f,
+            targetValue = 1.18f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "mic_scale",
+        )
+    } else {
+        remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+    }
+
+    FloatingActionButton(
+        onClick = onTap,
+        containerColor = if (isListening) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.scale(scale),
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_mic),
+            contentDescription = stringResource(R.string.cd_voice_agent),
+            tint = if (isListening) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+    }
+}
+
+/**
+ * Bottom sheet shown when a voice recognition result is ready.
+ * The user sees what was heard and what action will be taken, then
+ * confirms or dismisses without committing to the database.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun VoiceResultSheet(
+    result: VoiceAgentResult,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val intentLabel = when (result.parseResult.intent) {
+        ParsedIntent.CREATE_TASK ->
+            stringResource(R.string.voice_intent_task, result.parseResult.taskTitle ?: result.spokenText)
+        ParsedIntent.CREATE_LOG ->
+            stringResource(R.string.voice_intent_log, result.parseResult.logBody ?: result.spokenText)
+        ParsedIntent.CREATE_MEETING ->
+            stringResource(R.string.voice_intent_meeting, result.parseResult.meetingTitle ?: result.spokenText)
+        ParsedIntent.UNKNOWN ->
+            stringResource(R.string.voice_intent_task, result.spokenText)
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.voice_result_title),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "\"${result.spokenText}\"",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = intentLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(24.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.voice_result_dismiss))
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = onConfirm, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.voice_result_confirm))
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
     }
 }

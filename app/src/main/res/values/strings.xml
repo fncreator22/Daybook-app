@@ -218,4 +218,21 @@
     <string name="camera_permission_rationale">Daybook needs camera access to scan barcodes. Your camera feed is processed entirely on-device and never stored or sent anywhere.</string>
     <string name="camera_permission_denied">Camera access is required to scan barcodes. Please grant it in Settings.</string>
     <string name="camera_permission_open_settings">Open Settings</string>
+    <!-- Microphone / Voice agent permission -->
+    <string name="mic_permission_rationale">Daybook uses your microphone to understand voice commands — "add task buy milk" or "log meeting with design team". Speech is processed entirely on-device and never stored.</string>
+    <string name="mic_permission_denied">Microphone access is required for voice input. Please grant it in Settings.</string>
+
+    <!-- Voice agent button + result sheet -->
+    <string name="cd_voice_agent">Speak to agent</string>
+    <string name="voice_listening">Listening…</string>
+    <string name="voice_result_title">I heard</string>
+    <string name="voice_result_confirm">Add it</string>
+    <string name="voice_result_dismiss">Dismiss</string>
+    <string name="voice_error_no_match">Couldn\'t catch that. Try again.</string>
+    <string name="voice_error_unavailable">On-device speech not available on this device or Android version.</string>
+    <string name="voice_intent_task">Add task: %1$s</string>
+    <string name="voice_intent_log">Log: %1$s</string>
+    <string name="voice_intent_meeting">Add meeting: %1$s</string>
+    <string name="voice_intent_unknown">Create: %1$s</string>
+    <string name="voice_saved">Saved</string>
 </resources>

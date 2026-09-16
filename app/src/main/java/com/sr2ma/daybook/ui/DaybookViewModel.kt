@@ -13,6 +13,9 @@ import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.LogQuery
 import com.sr2ma.daybook.domain.MeetingFilter
 import com.sr2ma.daybook.domain.MeetingQuery
+import com.sr2ma.daybook.domain.NaturalLanguageParser
+import com.sr2ma.daybook.domain.ParsedIntent
+import com.sr2ma.daybook.domain.ParseResult
 import com.sr2ma.daybook.domain.TaskFilter
 import com.sr2ma.daybook.domain.TaskQuery
 import com.sr2ma.daybook.domain.TaskSort
@@ -180,7 +183,49 @@ class DaybookViewModel(
         ) { repository.deletePass(pass) }
     }
 
+    // ---- Voice agent --------------------------------------------------------
+
+    /** Called by the UI when mic button is pressed; sets the listening flag. */
+    fun startListening() = update { it.copy(isListening = true, voiceResult = null) }
+
+    /** Called when SpeechRecognizer returns a result (or error). */
+    fun onVoiceResult(text: String) {
+        val parsed = NaturalLanguageParser.parse(text, referenceDate = _state.value.today)
+        update { it.copy(isListening = false, voiceResult = VoiceAgentResult(text, parsed)) }
+    }
+
+    /** Called when SpeechRecognizer returns nothing useful. */
+    fun onVoiceNoMatch() = update { it.copy(isListening = false) }
+
+    /** User tapped "Add it" on the confirmation sheet — commit to DB. */
+    fun confirmVoiceResult() {
+        val result = _state.value.voiceResult ?: return
+        update { it.copy(voiceResult = null) }
+        val parsed: ParseResult = result.parseResult
+        when (parsed.intent) {
+            ParsedIntent.CREATE_TASK -> {
+                val title = parsed.taskTitle ?: result.spokenText
+                write { repository.saveTask(Task(title = title, dueDate = parsed.dueDate)) }
+            }
+            ParsedIntent.CREATE_LOG -> {
+                val body = parsed.logBody ?: result.spokenText
+                write { repository.saveLogEntry(LogEntry(body = body, kind = parsed.logKind, day = _state.value.today)) }
+            }
+            ParsedIntent.CREATE_MEETING -> {
+                val title = parsed.meetingTitle ?: result.spokenText
+                write { repository.saveMeeting(Meeting(title = title, day = _state.value.today)) }
+            }
+            ParsedIntent.UNKNOWN -> {
+                write { repository.saveTask(Task(title = result.spokenText)) }
+            }
+        }
+    }
+
+    /** User dismissed the confirmation sheet without saving. */
+    fun dismissVoiceResult() = update { it.copy(voiceResult = null) }
+
     // ---- Tasks -----------------------------------------------------------
+
 
     /** Saves the sheet and closes it. A blank title is ignored rather than stored. */
     fun saveTask(task: Task) {
