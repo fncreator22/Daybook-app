@@ -31,17 +31,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Accepts SDK licences. setup-android@v4 no longer tries to install the
-      # deprecated 'tools' package that broke v3 in mid-2026.
-      - name: Set up the Android SDK
-        uses: android-actions/setup-android@v4
+      # The ubuntu-latest runner ships a full Android SDK at ANDROID_SDK_ROOT.
+      # The 'tools' package was removed from the SDK repo in mid-2026, which
+      # breaks every version of the android-actions/setup-android action.
+      # We accept licenses manually instead and let AGP download anything else.
+      - name: Accept Android SDK licences
+        run: yes | sdkmanager --licenses || true
 
-      # Best effort only. The runner image already ships several platforms, and
-      # AGP downloads whatever else it needs, so a miss here must not fail the
-      # build.
+      # Best effort only — the runner image usually already has this platform.
       - name: Pre-install the compile SDK
         continue-on-error: true
-        run: sdkmanager --install "platforms;android-36"
+        run: sdkmanager "platforms;android-36"
 
       # This project intentionally has no gradle-wrapper.jar committed, so
       # Gradle is provisioned here instead. The version matches
