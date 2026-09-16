@@ -170,5 +170,17 @@ class DaybookDatabase(context: Context) :
             """.trimIndent(),
             "CREATE INDEX idx_passes_category ON passes(category)",
         )
+
+        @Volatile private var instance: DaybookDatabase? = null
+
+        /**
+         * Returns the process-wide singleton, creating it if needed.
+         * Used by [com.sr2ma.daybook.ai.NightlyAgentWorker] which cannot
+         * access [AppContainer] from a Worker context.
+         */
+        fun getInstance(context: Context): DaybookDatabase =
+            instance ?: synchronized(this) {
+                instance ?: DaybookDatabase(context.applicationContext).also { instance = it }
+            }
     }
 }
