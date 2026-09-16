@@ -27,7 +27,7 @@ workManager = "2.9.1"
 # LiteRT-LM: orchestration layer for on-device LLMs (Gemma 270M INT4)
 litert = "0.16.1"
 # ONNX Runtime Mobile: size-optimised, covers all ops used by MiniLM-L6-v2 INT8
-onnxruntime = "1.22.0"
+onnxruntime = "1.18.0"
 
 # Test only
 junit = "4.13.2"

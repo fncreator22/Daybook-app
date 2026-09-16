@@ -109,7 +109,7 @@ object NaturalLanguageParser {
                 .split(",")
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
-            attendees
+            afterWith
         } else emptyList()
 
         return ParseResult(

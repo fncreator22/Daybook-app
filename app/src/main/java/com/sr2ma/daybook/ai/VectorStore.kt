@@ -110,12 +110,18 @@ class VectorStore(private val database: SQLiteDatabase) {
                    $typeFilter
                  ORDER BY distance
             """.trimIndent()
-            val args = if (itemType != null) {
-                arrayOf(serializeVec(queryEmbedding), itemType)
-            } else {
-                arrayOf(serializeVec(queryEmbedding))
-            }
-            database.rawQuery(sql, args).use { cursor ->
+            // rawQuery only accepts String? args; pass the vector as an inline hex literal.
+            val hexVec = serializeVec(queryEmbedding).joinToString("") { "%02x".format(it) }
+            val inlineSql = """
+                SELECT item_id, item_type, distance
+                  FROM embeddings
+                 WHERE embedding MATCH X'$hexVec'
+                   AND k = $k
+                   $typeFilter
+                 ORDER BY distance
+            """.trimIndent()
+            val stringArgs: Array<String?> = if (itemType != null) arrayOf(itemType) else arrayOf()
+            database.rawQuery(inlineSql, stringArgs).use { cursor ->
                 buildList {
                     while (cursor.moveToNext()) {
                         add(

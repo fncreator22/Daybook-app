@@ -13,7 +13,6 @@ import com.sr2ma.daybook.data.DaybookDatabase
 import com.sr2ma.daybook.data.DaybookRepository
 import com.sr2ma.daybook.domain.AgentEngine
 import com.sr2ma.daybook.domain.BriefingWriter
-import com.sr2ma.daybook.domain.CadenceEngine
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
@@ -54,23 +53,11 @@ class NightlyAgentWorker(
         val allMeetings = repository.meetings.value
 
         // ── Step 1: Rule engine (always runs) ─────────────────────────────────
-        val cadenceEngine = CadenceEngine()
-        val newInstances = cadenceEngine.generateDueInstances(allTasks, today)
-        newInstances.forEach { task ->
-            repository.saveTask(task)
-            Log.d(TAG, "Cadence: generated task '${task.title}'")
-        }
+        val suggestions = AgentEngine.computeSuggestions(allTasks, allMeetings, today)
+        Log.i(TAG, "AgentEngine: ${suggestions.size} suggestion(s)")
 
-        val agentEngine = AgentEngine()
-        val suggestions = agentEngine.suggest(allTasks, allMeetings, today)
-        Log.i(TAG, "AgentEngine: ${suggestions.size} suggestions")
-
-        val briefing = BriefingWriter().buildBriefing(
-            tasks = repository.tasks.value,
-            meetings = allMeetings,
-            today = today,
-            suggestions = suggestions,
-        )
+        val todayBoard = com.sr2ma.daybook.domain.TodayBoard(day = today)
+        val briefing = BriefingWriter.write(todayBoard)
         Log.i(TAG, "Briefing ready: ${briefing.take(80)}…")
 
         // ── Step 2: AI features (optional, gated on model presence) ──────────
