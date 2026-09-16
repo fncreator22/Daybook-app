@@ -202,8 +202,13 @@ class DaybookViewModel(
         update { it.copy(isListening = false, voiceResult = VoiceAgentResult(text, parsed)) }
     }
 
-    /** Called when SpeechRecognizer returns nothing useful. */
-    fun onVoiceNoMatch() = update { it.copy(isListening = false) }
+    /** Called when SpeechRecognizer returns nothing (silence timeout, no match, error). */
+    fun onVoiceNoMatch() = update {
+        it.copy(
+            isListening = false,
+            message = nextMessage(R.string.voice_error_no_match),
+        )
+    }
 
     /** User tapped "Add it" on the confirmation sheet — commit to DB. */
     fun confirmVoiceResult() {
