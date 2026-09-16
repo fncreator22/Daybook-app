@@ -23,6 +23,12 @@ camerax = "1.6.2"
 # WorkManager for background jobs (nightly agent, sync)
 workManager = "2.9.1"
 
+# Phase 3 — On-device AI
+# LiteRT-LM: orchestration layer for on-device LLMs (Gemma 270M INT4)
+litert = "0.16.1"
+# ONNX Runtime Mobile: size-optimised, covers all ops used by MiniLM-L6-v2 INT8
+onnxruntime = "1.22.0"
+
 # Test only
 junit = "4.13.2"
 orgJson = "20240303"
@@ -60,6 +66,12 @@ camerax-mlkit = { group = "androidx.camera", name = "camera-mlkit-vision", versi
 
 # WorkManager
 workmanager-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
+
+# Phase 3 — On-device AI
+# LiteRT-LM: Google's on-device LLM orchestration (Gemma 270M INT4 QAT)
+litert-lm = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litert" }
+# ONNX Runtime Mobile: inference for MiniLM-L6-v2 INT8 embedding model (bundled in assets)
+onnxruntime-mobile = { group = "com.microsoft.onnxruntime", name = "onnxruntime-mobile", version.ref = "onnxruntime" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 # Android stubs org.json in unit tests, so the real implementation is needed on the test classpath.

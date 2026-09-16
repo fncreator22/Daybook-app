@@ -17,3 +17,10 @@ keystore.properties
 
 # Locally built APKs handed over by build-apk.
 /Daybook-*.apk
+
+# Phase 3 — On-device AI binary artifacts (not committed — see jniLibs/arm64-v8a/README.md)
+# sqlite-vec precompiled native library (~1 MB, downloaded by developer)
+app/src/main/jniLibs/arm64-v8a/libsqlitevec.so
+# Gemma 270M model file (~250-300 MB, downloaded on-device by ModelDownloader — never bundled)
+*.litertlm
+*.litertlm.tmp

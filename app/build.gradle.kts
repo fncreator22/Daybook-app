@@ -118,4 +118,12 @@ dependencies {
 
     // WorkManager (nightly agent, sync workers)
     implementation(libs.workmanager.ktx)
+
+    // Phase 3 — On-device AI (opt-in, lazy-loaded — never active until user enables AI)
+    // LiteRT-LM: Gemma 270M INT4 QAT inference. Model downloaded post-install, not bundled.
+    implementation(libs.litert.lm)
+    // ONNX Runtime Mobile: MiniLM-L6-v2 INT8 embeddings. Model bundled in assets (~22 MB).
+    implementation(libs.onnxruntime.mobile)
+    // sqlite-vec: KNN vector search. Pre-compiled ARM64 .so in jniLibs/arm64-v8a/.
+    // Download from: https://github.com/asg017/sqlite-vec/releases — place libsqlitevec.so there.
 }

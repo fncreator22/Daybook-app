@@ -10,9 +10,15 @@
 
       CAMERA: used only by the barcode wallet scanner (Phase 2). Requested
       at runtime when the user first opens the Wallet scan screen.
+
+      INTERNET: required only for the optional Gemma 270M model download (Phase 3).
+      The download is never triggered automatically — the user must explicitly opt in
+      through the AI settings screen. ModelDownloader enforces a >250 MB free-space
+      check and verifies the SHA-256 of the downloaded file before use.
     -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
 
     <application
