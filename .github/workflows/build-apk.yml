@@ -26,14 +26,15 @@ jobs:
 
       # AGP 8.13 and Kotlin 2.2 both require JDK 17.
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      # Puts the Android SDK on PATH and accepts the SDK licences.
+      # Accepts SDK licences. setup-android@v4 no longer tries to install the
+      # deprecated 'tools' package that broke v3 in mid-2026.
       - name: Set up the Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       # Best effort only. The runner image already ships several platforms, and
       # AGP downloads whatever else it needs, so a miss here must not fail the
