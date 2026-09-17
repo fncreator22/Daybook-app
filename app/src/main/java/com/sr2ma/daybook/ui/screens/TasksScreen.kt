@@ -41,6 +41,7 @@ import com.sr2ma.daybook.ui.components.SearchField
 import com.sr2ma.daybook.ui.components.SectionHeader
 import com.sr2ma.daybook.ui.components.TaskRow
 import com.sr2ma.daybook.ui.labelRes
+import com.sr2ma.daybook.sync.PendingSyncBanner
 
 /**
  * The full task list, with the three controls that matter kept visible and the
@@ -91,6 +92,8 @@ fun TasksScreen(
             placeholder = stringResource(R.string.tasks_search_hint),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
+
+        PendingSyncBanner(pendingCount = state.pendingSyncCount)
 
         LazyColumn(
             state = listState,

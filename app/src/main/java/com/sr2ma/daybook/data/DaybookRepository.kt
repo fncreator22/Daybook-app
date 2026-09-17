@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
  * tracker has no throughput to lose by it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class DaybookRepository(private val database: DaybookDatabase) {
+class DaybookRepository(internal val database: DaybookDatabase) {
 
     private val io: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
 

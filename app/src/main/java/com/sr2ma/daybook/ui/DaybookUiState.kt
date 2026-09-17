@@ -13,7 +13,9 @@ import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.LogKind
 import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.domain.model.Pass
+import com.sr2ma.daybook.domain.model.SyncStatus
 import com.sr2ma.daybook.domain.model.Task
+import com.sr2ma.daybook.domain.model.WhatsAppMessage
 import java.time.LocalDate
 
 /** The six destinations in the bottom bar. */
@@ -126,8 +128,18 @@ data class DaybookUiState(
      * Shown in [VoiceResultSheet]. The user either confirms (saves) or dismisses.
      */
     val voiceResult: VoiceAgentResult? = null,
+
+    // ── WhatsApp reader ───────────────────────────────────────────────────────
+    /** Most recent WhatsApp messages, shown in the Today board. Empty when the
+     *  notification-reader is disabled or no messages have been received yet. */
+    val recentWhatsAppMessages: List<WhatsAppMessage> = emptyList(),
 ) {
     val taskCount: Int get() = tasks.size
     val logCount: Int get() = logEntries.size
     val meetingCount: Int get() = meetings.size
+
+    /** Items waiting to sync (PENDING_SYNC + SYNC_ERROR) across tasks and meetings. */
+    val pendingSyncCount: Int get() =
+        tasks.count { it.syncStatus == SyncStatus.PENDING_SYNC || it.syncStatus == SyncStatus.SYNC_ERROR } +
+        meetings.count { it.syncStatus == SyncStatus.PENDING_SYNC || it.syncStatus == SyncStatus.SYNC_ERROR }
 }

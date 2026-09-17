@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -34,15 +35,18 @@ import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.model.LogEntry
+import com.sr2ma.daybook.domain.model.WhatsAppMessage
 import com.sr2ma.daybook.ui.DaybookUiState
 import com.sr2ma.daybook.ui.DaybookViewModel
 import com.sr2ma.daybook.ui.components.AccentChip
+import com.sr2ma.daybook.ui.components.DaybookCard
 import com.sr2ma.daybook.ui.components.EmptyState
 import com.sr2ma.daybook.ui.components.LogEntryRow
 import com.sr2ma.daybook.ui.components.MeetingRow
 import com.sr2ma.daybook.ui.components.SectionHeader
 import com.sr2ma.daybook.ui.components.TaskRow
 import com.sr2ma.daybook.ui.theme.DaybookAccents
+import com.sr2ma.daybook.whatsapp.WhatsAppReplyHelper
 import java.time.LocalDate
 
 /**
@@ -154,6 +158,7 @@ fun TodayScreen(
                 )
             }
             logSection(entries = board.log, today = state.today, viewModel = viewModel)
+            whatsAppSection(messages = state.recentWhatsAppMessages)
         }
     }
 }
@@ -184,6 +189,58 @@ private fun LazyListScope.logSection(
     item(key = "log-add") {
         TextButton(onClick = { viewModel.newLogEntry(today) }) {
             Text(stringResource(R.string.today_add_log_entry))
+        }
+    }
+}
+
+/**
+ * Recent WhatsApp messages, shown below the log when the notification reader is active.
+ * Each card shows sender + preview and a "Reply" button that opens WhatsApp to the sender.
+ * Hidden entirely when the list is empty (reader off or no messages yet).
+ */
+private fun LazyListScope.whatsAppSection(messages: List<WhatsAppMessage>) {
+    if (messages.isEmpty()) return
+    item(key = "whatsapp-header") {
+        SectionHeader(
+            title = "Messages",
+            count = messages.size,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+    }
+    items(items = messages, key = { "wa-${it.id}" }) { msg ->
+        WhatsAppMessageCard(msg)
+    }
+}
+
+@Composable
+private fun WhatsAppMessageCard(msg: WhatsAppMessage) {
+    val context = LocalContext.current
+    DaybookCard {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = msg.sender,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = msg.message.take(80) + if (msg.message.length > 80) "…" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            TextButton(
+                onClick = { WhatsAppReplyHelper.openReply(context, msg.sender, "") },
+            ) {
+                Text("Reply")
+            }
         }
     }
 }

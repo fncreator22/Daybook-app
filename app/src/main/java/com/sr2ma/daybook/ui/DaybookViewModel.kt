@@ -26,6 +26,7 @@ import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.ScanResult
+import com.sr2ma.daybook.data.dao.WhatsAppDao
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,8 @@ class DaybookViewModel(
     private val codec: BackupCodec = BackupCodec(),
 ) : ViewModel() {
 
+    private val whatsAppDao = WhatsAppDao(repository.database)
+
     private val _state = MutableStateFlow(derive(DaybookUiState(today = Dates.today())))
     val state: StateFlow<DaybookUiState> = _state.asStateFlow()
 
@@ -77,6 +80,8 @@ class DaybookViewModel(
                 update { it.copy(loaded = true) }
             }
         }
+        // Load recent WhatsApp messages for the Today board.
+        loadRecentWhatsAppMessages()
         // Every write refreshes a repository flow, which lands here and re-derives.
         // Collecting the flows separately keeps each write cheap: only the
         // list that actually changed is re-read from SQLite by the repository.
@@ -112,6 +117,14 @@ class DaybookViewModel(
     fun refreshToday() = update { it.copy(today = Dates.today()) }
 
     fun consumeMessage() = update { it.copy(message = null) }
+
+    /** Refresh the WhatsApp messages shown in the Today board. */
+    fun loadRecentWhatsAppMessages() {
+        viewModelScope.launch {
+            val msgs = withContext(Dispatchers.IO) { whatsAppDao.recentMessages(20) }
+            update { it.copy(recentWhatsAppMessages = msgs) }
+        }
+    }
 
     // ---- Editor sheets ---------------------------------------------------
 

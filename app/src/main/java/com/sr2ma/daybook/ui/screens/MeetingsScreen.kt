@@ -25,6 +25,7 @@ import com.sr2ma.daybook.ui.components.FilterChipRow
 import com.sr2ma.daybook.ui.components.MeetingRow
 import com.sr2ma.daybook.ui.components.SearchField
 import com.sr2ma.daybook.ui.labelRes
+import com.sr2ma.daybook.sync.PendingSyncBanner
 
 /**
  * Meetings, in whichever direction the filter is pointing.
@@ -65,6 +66,8 @@ fun MeetingsScreen(
             placeholder = stringResource(R.string.meetings_search_hint),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
+
+        PendingSyncBanner(pendingCount = state.pendingSyncCount)
 
         LazyColumn(
             state = listState,
