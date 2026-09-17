@@ -34,6 +34,7 @@ import com.sr2ma.daybook.BuildConfig
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.sync.SyncSettingsSection
 import com.sr2ma.daybook.sync.SyncViewModel
+import com.sr2ma.daybook.whatsapp.WhatsAppSettingsSection
 import com.sr2ma.daybook.ui.DaybookUiState
 import com.sr2ma.daybook.ui.DaybookViewModel
 import com.sr2ma.daybook.ui.components.ConfirmDialog
@@ -101,6 +102,9 @@ fun SettingsScreen(
             // ── Sync & Backup (Google Calendar + Drive) ────────────────────────
             Spacer(Modifier.height(8.dp))
             SyncSettingsSection(syncViewModel = syncViewModel)
+
+            // ── Phase 7: WhatsApp Notification Reader ─────────────────────────
+            WhatsAppSettingsSection()
 
             SectionHeader(
                 title = stringResource(R.string.settings_section_data),

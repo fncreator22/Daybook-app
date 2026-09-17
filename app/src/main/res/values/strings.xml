@@ -239,7 +239,11 @@
     <!-- Wallet add dialog -->
     <string name="wallet_add_scan">Scan barcode / QR code</string>
     <string name="wallet_add_manual">Add manually</string>
+    <!-- Phase 7: WhatsApp Reader -->
+    <string name="whatsapp_reader_label">WhatsApp Reader</string>
+
     <!-- Google OAuth client ID for Calendar + Drive sync (replace with real value from Google Cloud Console) -->
     <string name="google_server_client_id" translatable="false">YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com</string>
 </resources>
+
 

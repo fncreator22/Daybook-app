@@ -50,6 +50,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          Phase 7 — WhatsApp Notification Reader (opt-in).
+          NotificationListenerService is a privileged Android service; it requires the user to
+          explicitly grant "Notification Access" in Android Settings → Apps → Special app access.
+          The service does nothing until the user enables it in Daybook Settings AND grants
+          Android-level Notification Access. It reads only notification title + text — the same
+          text visible in the notification shade. No WhatsApp DB or chat history is accessed.
+        -->
+        <service
+            android:name=".whatsapp.WhatsAppListenerService"
+            android:exported="false"
+            android:label="@string/whatsapp_reader_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>
