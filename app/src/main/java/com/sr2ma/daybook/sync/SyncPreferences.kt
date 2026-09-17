@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.sync
+package com.sr2ma.daybook.sync
 
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -91,6 +91,17 @@ class SyncPreferences(context: Context) {
     val isSignedIn: Boolean
         get() = accountEmail != null && accessToken != null
 
+    // ── Per-tool autonomy levels (§8) — default ASK_EVERY_TIME ───────────────
+
+    fun getAutonomy(category: com.sr2ma.daybook.domain.model.ToolCategory): com.sr2ma.daybook.domain.model.AutonomyLevel =
+        com.sr2ma.daybook.domain.model.AutonomyLevel.fromStored(
+            prefs.getString("autonomy_${category.storedValue}", null)
+        )
+
+    fun setAutonomy(category: com.sr2ma.daybook.domain.model.ToolCategory, level: com.sr2ma.daybook.domain.model.AutonomyLevel) {
+        prefs.edit().putString("autonomy_${category.storedValue}", level.storedValue).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "daybook_sync_prefs"
         private const val KEY_ACCOUNT_EMAIL = "account_email"
@@ -104,3 +115,4 @@ class SyncPreferences(context: Context) {
         private const val KEY_LAST_DRIVE_BACKUP = "last_drive_backup"
     }
 }
+

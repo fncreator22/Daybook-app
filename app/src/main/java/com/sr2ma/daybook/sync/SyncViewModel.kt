@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.sync
+package com.sr2ma.daybook.sync
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.sr2ma.daybook.domain.model.AutonomyLevel
+import com.sr2ma.daybook.domain.model.ToolCategory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,11 +37,21 @@ class SyncViewModel(
             driveAutoBackup = prefs.driveAutoBackup,
             lastCalendarSyncAt = prefs.lastCalendarSyncAt,
             lastDriveBackupAt = prefs.lastDriveBackupAt,
+            autonomyLevels = ToolCategory.entries.associateWith { prefs.getAutonomy(it) },
         )
     }
 
     private fun refreshState() {
         _state.value = loadState()
+    }
+
+    // ── Autonomy level control (§8) ───────────────────────────────────────────
+
+    fun setAutonomy(category: ToolCategory, level: AutonomyLevel) {
+        syncManager.syncPrefs.setAutonomy(category, level)
+        _state.value = _state.value.copy(
+            autonomyLevels = _state.value.autonomyLevels + (category to level)
+        )
     }
 
     // ── Auth ─────────────────────────────────────────────────────────────────
@@ -177,4 +189,6 @@ data class SyncUiState(
     val showRestorePicker: Boolean = false,
     val driveBackups: List<DriveBackupWorker.DriveFile> = emptyList(),
     val errorMessage: String? = null,
+    /** Per-tool autonomy levels. Default ASK_EVERY_TIME for all categories. */
+    val autonomyLevels: Map<ToolCategory, AutonomyLevel> = emptyMap(),
 )

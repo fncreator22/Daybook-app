@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.sync
+package com.sr2ma.daybook.sync
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -20,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.sr2ma.daybook.domain.model.AutonomyLevel
+import com.sr2ma.daybook.domain.model.ToolCategory
 import com.sr2ma.daybook.ui.components.DaybookCard
 import com.sr2ma.daybook.ui.components.SectionHeader
 import java.text.SimpleDateFormat
@@ -116,6 +119,33 @@ fun SyncSettingsSection(
 
         Spacer(Modifier.height(8.dp))
 
+        // ── Agent autonomy levels (§8) ────────────────────────────────────────
+        DaybookCard {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Text(
+                    text = "Agent autonomy",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "How much the voice agent can do automatically",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+                )
+                ToolCategory.entries.forEachIndexed { index, category ->
+                    if (index > 0) HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    val currentLevel = state.autonomyLevels[category] ?: AutonomyLevel.ASK_EVERY_TIME
+                    AutonomyRow(
+                        category = category,
+                        selected = currentLevel,
+                        onSelect = { level -> syncViewModel.setAutonomy(category, level) },
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
         // ── Action buttons ────────────────────────────────────────────────────
         DaybookCard(onClick = if (state.isSignedIn && !state.busy) syncViewModel::syncNow else null) {
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
@@ -205,6 +235,39 @@ private fun SyncToggleRow(
             onCheckedChange = { onCheckedChange() },
             enabled = enabled,
         )
+    }
+}
+
+/**
+ * One row of the Agent Autonomy card — the category label on the left and a
+ * three-segment chip row (Ask | Session | Always) on the right.
+ *
+ * Ask       = agent must ask every time (default for off-device writes, §8)
+ * Session   = auto-approved for this app session; resets on cold start
+ * Always    = permanently auto; user must explicitly opt in
+ */
+@Composable
+private fun AutonomyRow(
+    category: ToolCategory,
+    selected: AutonomyLevel,
+    onSelect: (AutonomyLevel) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = category.label,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(modifier = Modifier.padding(top = 4.dp)) {
+            AutonomyLevel.entries.forEach { level ->
+                FilterChip(
+                    selected = selected == level,
+                    onClick = { onSelect(level) },
+                    label = { Text(level.label, style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            }
+        }
     }
 }
 

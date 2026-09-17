@@ -113,3 +113,35 @@ enum class SyncStatus(val storedValue: String) {
             entries.firstOrNull { it.storedValue == value } ?: LOCAL_ONLY
     }
 }
+
+/**
+ * How much autonomy the AI agent has when executing a tool in a given category.
+ *
+ * ASK_EVERY_TIME  — default for anything that writes off-device. Agent surfaces a
+ *                   confirmation before acting.
+ * AUTO_SESSION    — approved for this app session only; resets on next cold start.
+ * ALWAYS_AUTO     — user permanently opted in; agent acts without asking.
+ *
+ * Per architecture doc §8: default must be ASK_EVERY_TIME for Calendar, Drive,
+ * Gmail and Wallet writes.
+ */
+enum class AutonomyLevel(val storedValue: String, val label: String) {
+    ASK_EVERY_TIME("ASK", "Ask"),
+    AUTO_SESSION("SESSION", "Session"),
+    ALWAYS_AUTO("ALWAYS", "Always"),
+    ;
+
+    companion object {
+        fun fromStored(value: String?): AutonomyLevel =
+            entries.firstOrNull { it.storedValue == value } ?: ASK_EVERY_TIME
+    }
+}
+
+/** Tool categories whose autonomy level is configurable by the user. */
+enum class ToolCategory(val storedValue: String, val label: String) {
+    CALENDAR("CALENDAR", "Calendar"),
+    DRIVE("DRIVE", "Drive"),
+    GMAIL("GMAIL", "Gmail"),
+    WALLET("WALLET", "Wallet"),
+    ;
+}
