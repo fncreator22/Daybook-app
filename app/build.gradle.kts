@@ -126,4 +126,13 @@ dependencies {
     implementation(libs.onnxruntime.mobile)
     // sqlite-vec: KNN vector search. Pre-compiled ARM64 .so in jniLibs/arm64-v8a/.
     // Download from: https://github.com/asg017/sqlite-vec/releases — place libsqlitevec.so there.
+
+    // Phase 4 — Google Calendar + Drive sync (opt-in, user-controlled)
+    // Jetpack Security: EncryptedSharedPreferences backed by Android Keystore.
+    implementation(libs.security.crypto)
+    // Android Credential Manager: Google Sign-In (ID token flow).
+    implementation(libs.credentials)
+    implementation(libs.credentials.play.services.auth)
+    // Google ID: GoogleIdTokenCredential, GetGoogleIdOption.
+    implementation(libs.googleid)
 }

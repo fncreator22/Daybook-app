@@ -10,6 +10,7 @@ import com.sr2ma.daybook.data.reqLong
 import com.sr2ma.daybook.data.reqString
 import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.SyncStatus
 import java.time.LocalDate
 
 /** All reads and writes for the `meetings` table. */
@@ -17,6 +18,10 @@ class MeetingDao(private val helper: DaybookDatabase) {
 
     fun all(): List<Meeting> =
         helper.readableDatabase.rawQuery(SELECT_ALL, null).mapRows(::readMeeting)
+
+    /** Returns all meetings whose sync_status = PENDING_SYNC. */
+    fun pendingSync(): List<Meeting> =
+        helper.readableDatabase.rawQuery(SELECT_PENDING_SYNC, null).mapRows(::readMeeting)
 
     /** See [com.sr2ma.daybook.data.dao.TaskDao.upsert] for why this is not `insert`. */
     fun upsert(meeting: Meeting): Long {
@@ -36,6 +41,20 @@ class MeetingDao(private val helper: DaybookDatabase) {
         } else {
             db.insertOrThrow(DaybookDatabase.TABLE_MEETINGS, null, values)
         }
+    }
+
+    /** Updates only sync_status and gcal_event_id for a given meeting row. */
+    fun updateSyncStatus(id: Long, status: SyncStatus, gcalEventId: String?) {
+        val values = ContentValues().apply {
+            put("sync_status", status.storedValue)
+            put("gcal_event_id", gcalEventId)
+        }
+        helper.writableDatabase.update(
+            DaybookDatabase.TABLE_MEETINGS,
+            values,
+            WHERE_ID,
+            arrayOf(id.toString()),
+        )
     }
 
     /**
@@ -62,6 +81,8 @@ class MeetingDao(private val helper: DaybookDatabase) {
         put("notes", notes)
         put("next_touch", Dates.store(nextTouch))
         put("follow_up_done", if (followUpDone) 1 else 0)
+        put("gcal_event_id", gcalEventId)
+        put("sync_status", syncStatus.storedValue)
         put("created_at", createdAt)
         put("updated_at", updatedAt)
     }
@@ -78,6 +99,8 @@ class MeetingDao(private val helper: DaybookDatabase) {
         followUpDone = cursor.reqBoolean("follow_up_done"),
         createdAt = cursor.reqLong("created_at"),
         updatedAt = cursor.reqLong("updated_at"),
+        gcalEventId = cursor.optString("gcal_event_id"),
+        syncStatus = SyncStatus.fromStored(cursor.optString("sync_status")),
     )
 
     private companion object {
@@ -91,6 +114,10 @@ class MeetingDao(private val helper: DaybookDatabase) {
                 CASE WHEN start_time IS NULL THEN 1 ELSE 0 END ASC,
                 start_time DESC,
                 created_at DESC
+        """
+
+        const val SELECT_PENDING_SYNC = """
+            SELECT * FROM meetings WHERE sync_status = 'PENDING_SYNC'
         """
     }
 }

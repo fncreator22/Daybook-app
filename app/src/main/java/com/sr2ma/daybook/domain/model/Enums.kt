@@ -93,3 +93,23 @@ enum class PassCategory(val storedValue: String) {
             entries.firstOrNull { it.storedValue == value } ?: OTHER
     }
 }
+
+/**
+ * Where a meeting or task sits in the Google Calendar sync pipeline.
+ * LOCAL_ONLY = created locally, not yet eligible for sync.
+ * PENDING_SYNC = user enabled sync; queued for next WorkManager run.
+ * SYNCED = successfully pushed; gcal_event_id is populated.
+ * SYNC_ERROR = last sync attempt failed; can be retried.
+ */
+enum class SyncStatus(val storedValue: String) {
+    LOCAL_ONLY("LOCAL_ONLY"),
+    PENDING_SYNC("PENDING_SYNC"),
+    SYNCED("SYNCED"),
+    SYNC_ERROR("SYNC_ERROR"),
+    ;
+
+    companion object {
+        fun fromStored(value: String?): SyncStatus =
+            entries.firstOrNull { it.storedValue == value } ?: LOCAL_ONLY
+    }
+}

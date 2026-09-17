@@ -18,6 +18,12 @@ data class Task(
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
     val completedAt: Long? = null,
+    /** Google Calendar event ID populated after a successful sync. */
+    val gcalEventId: String? = null,
+    /** Current sync state. Default LOCAL_ONLY until user enables task calendar sync. */
+    val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY,
+    /** Per-task opt-in for calendar sync (only meaningful when task has a due date). */
+    val calendarSyncEnabled: Boolean = false,
 ) {
     val isOpen: Boolean get() = !status.isClosed
 
@@ -55,6 +61,10 @@ data class Meeting(
     val followUpDone: Boolean = false,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
+    /** Google Calendar event ID populated after a successful sync. */
+    val gcalEventId: String? = null,
+    /** Current sync state for Google Calendar. Default LOCAL_ONLY until user enables sync. */
+    val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY,
 ) {
     /** Attendees are entered as free text; split on commas for display and counting. */
     val attendeeList: List<String>

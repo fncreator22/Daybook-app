@@ -29,6 +29,13 @@ litert = "0.16.1"
 # ONNX Runtime Mobile: size-optimised, covers all ops used by MiniLM-L6-v2 INT8
 onnxruntime = "1.18.0"
 
+# Phase 4 — Google Calendar + Drive sync (opt-in, user-controlled)
+# Jetpack Security: EncryptedSharedPreferences for OAuth token storage
+securityCrypto = "1.1.0-alpha06"
+# Android Credential Manager + Google Sign-In (ID token flow)
+credentialManager = "1.3.0"
+googleid = "1.1.1"
+
 # Test only
 junit = "4.13.2"
 orgJson = "20240303"
@@ -76,6 +83,12 @@ onnxruntime-mobile = { group = "com.microsoft.onnxruntime", name = "onnxruntime-
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 # Android stubs org.json in unit tests, so the real implementation is needed on the test classpath.
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
+
+# Phase 4 — Google Calendar + Drive sync
+security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentialManager" }
+credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialManager" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

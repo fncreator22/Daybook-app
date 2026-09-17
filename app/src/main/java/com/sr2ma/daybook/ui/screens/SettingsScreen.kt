@@ -32,6 +32,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.BuildConfig
 import com.sr2ma.daybook.R
+import com.sr2ma.daybook.sync.SyncSettingsSection
+import com.sr2ma.daybook.sync.SyncViewModel
 import com.sr2ma.daybook.ui.DaybookUiState
 import com.sr2ma.daybook.ui.DaybookViewModel
 import com.sr2ma.daybook.ui.components.ConfirmDialog
@@ -50,6 +52,7 @@ import com.sr2ma.daybook.ui.components.SectionHeader
 fun SettingsScreen(
     state: DaybookUiState,
     viewModel: DaybookViewModel,
+    syncViewModel: SyncViewModel,
     onExport: () -> Unit,
     onImport: (replaceExisting: Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -94,6 +97,10 @@ fun SettingsScreen(
                 enabled = !state.busy,
                 onClick = { askImportMode = true },
             )
+
+            // ── Sync & Backup (Google Calendar + Drive) ────────────────────────
+            Spacer(Modifier.height(8.dp))
+            SyncSettingsSection(syncViewModel = syncViewModel)
 
             SectionHeader(
                 title = stringResource(R.string.settings_section_data),

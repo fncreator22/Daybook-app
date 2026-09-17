@@ -12,6 +12,7 @@ import com.sr2ma.daybook.data.reqString
 import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.model.Cadence
 import com.sr2ma.daybook.domain.model.Priority
+import com.sr2ma.daybook.domain.model.SyncStatus
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.TaskStatus
 
@@ -20,6 +21,10 @@ class TaskDao(private val helper: DaybookDatabase) {
 
     fun all(): List<Task> =
         helper.readableDatabase.rawQuery(SELECT_ALL, null).mapRows(::readTask)
+
+    /** Returns all tasks with calendar_sync_enabled=1 and sync_status=PENDING_SYNC. */
+    fun pendingCalendarSync(): List<Task> =
+        helper.readableDatabase.rawQuery(SELECT_PENDING_SYNC, null).mapRows(::readTask)
 
     /**
      * Inserts when [task] has id 0, otherwise updates. Returns the row id.
@@ -49,6 +54,20 @@ class TaskDao(private val helper: DaybookDatabase) {
         }
     }
 
+    /** Updates only sync_status and gcal_event_id for a given task row. */
+    fun updateSyncStatus(id: Long, status: SyncStatus, gcalEventId: String?) {
+        val values = ContentValues().apply {
+            put("sync_status", status.storedValue)
+            put("gcal_event_id", gcalEventId)
+        }
+        helper.writableDatabase.update(
+            DaybookDatabase.TABLE_TASKS,
+            values,
+            WHERE_ID,
+            arrayOf(id.toString()),
+        )
+    }
+
     fun delete(id: Long): Int =
         helper.writableDatabase.delete(
             DaybookDatabase.TABLE_TASKS,
@@ -76,6 +95,9 @@ class TaskDao(private val helper: DaybookDatabase) {
         put("created_at", createdAt)
         put("updated_at", updatedAt)
         put("completed_at", completedAt)
+        put("gcal_event_id", gcalEventId)
+        put("sync_status", syncStatus.storedValue)
+        put("calendar_sync_enabled", if (calendarSyncEnabled) 1 else 0)
     }
 
     private fun readTask(cursor: Cursor): Task = Task(
@@ -92,6 +114,9 @@ class TaskDao(private val helper: DaybookDatabase) {
         createdAt = cursor.reqLong("created_at"),
         updatedAt = cursor.reqLong("updated_at"),
         completedAt = cursor.optLong("completed_at"),
+        gcalEventId = cursor.optString("gcal_event_id"),
+        syncStatus = SyncStatus.fromStored(cursor.optString("sync_status")),
+        calendarSyncEnabled = cursor.reqInt("calendar_sync_enabled") != 0,
     )
 
     private companion object {
@@ -116,6 +141,11 @@ class TaskDao(private val helper: DaybookDatabase) {
             SELECT DISTINCT project FROM tasks
             WHERE project IS NOT NULL AND TRIM(project) <> ''
             ORDER BY project COLLATE NOCASE ASC
+        """
+
+        const val SELECT_PENDING_SYNC = """
+            SELECT * FROM tasks
+            WHERE calendar_sync_enabled = 1 AND sync_status = 'PENDING_SYNC'
         """
     }
 }

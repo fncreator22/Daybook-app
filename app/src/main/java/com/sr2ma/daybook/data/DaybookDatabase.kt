@@ -21,6 +21,7 @@ import android.database.sqlite.SQLiteOpenHelper
  *   v2 → v3: meetings — ai_summary, ai_summary_at
  *   v3 → v4: meetings — calendar_event_id
  *   v4 → v5: passes table (barcode wallet)
+ *   v5 → v6: meetings + tasks — gcal_event_id, sync_status, tasks.calendar_sync_enabled
  */
 class DaybookDatabase(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -40,11 +41,12 @@ class DaybookDatabase(context: Context) :
         if (oldVersion < 3) MIGRATIONS_V3.forEach(db::execSQL)
         if (oldVersion < 4) MIGRATIONS_V4.forEach(db::execSQL)
         if (oldVersion < 5) MIGRATIONS_V5.forEach(db::execSQL)
+        if (oldVersion < 6) MIGRATIONS_V6.forEach(db::execSQL)
     }
 
     companion object {
         const val DATABASE_NAME = "daybook.db"
-        const val DATABASE_VERSION = 5
+        const val DATABASE_VERSION = 6
 
         const val TABLE_MEETINGS = "meetings"
         const val TABLE_TASKS = "tasks"
@@ -71,6 +73,8 @@ class DaybookDatabase(context: Context) :
                 ai_summary TEXT,
                 ai_summary_at INTEGER,
                 calendar_event_id TEXT,
+                gcal_event_id TEXT,
+                sync_status TEXT NOT NULL DEFAULT 'LOCAL_ONLY',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )
@@ -90,7 +94,10 @@ class DaybookDatabase(context: Context) :
                 cadence_last_generated TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
-                completed_at INTEGER
+                completed_at INTEGER,
+                gcal_event_id TEXT,
+                sync_status TEXT NOT NULL DEFAULT 'LOCAL_ONLY',
+                calendar_sync_enabled INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent(),
             """
@@ -169,6 +176,15 @@ class DaybookDatabase(context: Context) :
             )
             """.trimIndent(),
             "CREATE INDEX idx_passes_category ON passes(category)",
+        )
+
+        /** v5 → v6: Google Calendar sync columns on meetings and tasks */
+        val MIGRATIONS_V6: List<String> = listOf(
+            "ALTER TABLE meetings ADD COLUMN gcal_event_id TEXT",
+            "ALTER TABLE meetings ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'LOCAL_ONLY'",
+            "ALTER TABLE tasks ADD COLUMN gcal_event_id TEXT",
+            "ALTER TABLE tasks ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'LOCAL_ONLY'",
+            "ALTER TABLE tasks ADD COLUMN calendar_sync_enabled INTEGER NOT NULL DEFAULT 0",
         )
 
         @Volatile private var instance: DaybookDatabase? = null

@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.data.BackupCodec
 import com.sr2ma.daybook.domain.ParsedIntent
+import com.sr2ma.daybook.sync.SyncViewModel
 import com.sr2ma.daybook.ui.editors.LogEditor
 import com.sr2ma.daybook.ui.editors.MeetingEditor
 import com.sr2ma.daybook.ui.editors.PassConfirmSheet
@@ -90,7 +91,7 @@ private val IMPORT_MIME_TYPES = arrayOf(
  * belongs to is used, and Settings is created and destroyed as tabs change.
  */
 @Composable
-fun DaybookApp(viewModel: DaybookViewModel) {
+fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -231,6 +232,7 @@ fun DaybookApp(viewModel: DaybookViewModel) {
                         DaybookTab.SETTINGS -> SettingsScreen(
                             state = state,
                             viewModel = viewModel,
+                            syncViewModel = syncViewModel,
                             onExport = {
                                 exportLauncher.launch(BackupCodec.suggestedFileName(state.today))
                             },

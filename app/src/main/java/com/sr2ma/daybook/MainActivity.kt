@@ -7,6 +7,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import com.sr2ma.daybook.sync.SyncViewModel
 import com.sr2ma.daybook.ui.DaybookApp
 import com.sr2ma.daybook.ui.DaybookViewModel
 import com.sr2ma.daybook.ui.theme.DaybookTheme
@@ -21,6 +22,10 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: DaybookViewModel by viewModels {
         DaybookViewModel.factory((application as DaybookApplication).container.repository)
+    }
+
+    private val syncViewModel: SyncViewModel by viewModels {
+        SyncViewModel.factory((application as DaybookApplication).container.syncManager)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,7 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             DaybookTheme {
-                DaybookApp(viewModel)
+                DaybookApp(viewModel, syncViewModel)
             }
         }
     }
