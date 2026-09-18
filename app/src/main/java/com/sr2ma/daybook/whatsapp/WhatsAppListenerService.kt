@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.whatsapp
+package com.sr2ma.daybook.whatsapp
 
 import android.content.ComponentName
 import android.content.Context
@@ -70,7 +70,6 @@ class WhatsAppListenerService : NotificationListenerService() {
 
         scope.launch {
             dao?.insert(msg)
-            Log.d(TAG, "Stored message from: $title")
         }
     }
 
