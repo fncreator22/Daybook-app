@@ -72,10 +72,10 @@ class SyncViewModel(
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     busy = false,
-                    errorMessage = "Sign-in failed",
+                    errorMessage = e.message ?: "Sign-in failed",
                 )
                 return@launch
             }

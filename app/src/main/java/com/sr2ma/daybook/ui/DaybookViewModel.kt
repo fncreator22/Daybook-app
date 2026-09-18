@@ -244,6 +244,8 @@ class DaybookViewModel(
     fun onVoiceError(code: Int) = update {
         val msg = if (code == android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
             nextMessage(R.string.mic_permission_denied)
+        } else if (code == android.speech.SpeechRecognizer.ERROR_CLIENT) {
+            nextMessage(R.string.voice_error_unavailable)
         } else {
             nextMessage(R.string.voice_error_no_match)
         }

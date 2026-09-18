@@ -9,6 +9,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -147,6 +149,15 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
                 context.getString(message.textRes, *message.args.toTypedArray()),
             )
             viewModel.consumeMessage()
+        }
+    }
+
+    val syncState by syncViewModel.state.collectAsState()
+    val syncErrorMessage = syncState.errorMessage
+    LaunchedEffect(syncErrorMessage) {
+        if (syncErrorMessage != null) {
+            snackbarHostState.showSnackbar(syncErrorMessage)
+            syncViewModel.consumeError()
         }
     }
 
@@ -438,17 +449,51 @@ private fun VoiceAgentButton(
     isListening: Boolean,
     onTap: () -> Unit,
 ) {
-    FloatingActionButton(
-        onClick = onTap,
-        containerColor = if (isListening) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_mic),
-            contentDescription = stringResource(R.string.cd_voice_agent),
-            tint = if (isListening) MaterialTheme.colorScheme.onPrimaryContainer
-            else MaterialTheme.colorScheme.onSecondaryContainer,
-        )
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isListening) 1.5f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isListening) 0f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse_alpha"
+    )
+
+    Box(contentAlignment = Alignment.Center) {
+        if (isListening) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        this.alpha = alpha
+                    }
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+            )
+        }
+        FloatingActionButton(
+            onClick = onTap,
+            containerColor = if (isListening) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.secondaryContainer,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_mic),
+                contentDescription = stringResource(R.string.cd_voice_agent),
+                tint = if (isListening) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
     }
 }
 

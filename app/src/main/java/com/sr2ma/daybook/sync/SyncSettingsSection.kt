@@ -42,11 +42,6 @@ fun SyncSettingsSection(
 ) {
     val state by syncViewModel.state.collectAsState()
 
-    // Snackbar-style feedback via error message
-    state.errorMessage?.let { msg ->
-        LaunchedEffect(msg) { syncViewModel.consumeError() }
-    }
-
     val isPlaceholder = androidx.compose.ui.res.booleanResource(com.sr2ma.daybook.R.bool.google_auth_placeholder)
 
     Column(modifier = modifier) {
