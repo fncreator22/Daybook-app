@@ -123,6 +123,8 @@ data class DaybookUiState(
     // ── Voice agent ───────────────────────────────────────────────────────────
     /** True while SpeechRecognizer is actively listening. */
     val isListening: Boolean = false,
+    val voiceRetried: Boolean = false,
+    val voiceRetryMessage: String? = null,
     /**
      * Non-null when a voice recognition result is waiting for user confirmation.
      * Shown in [VoiceResultSheet]. The user either confirms (saves) or dismisses.

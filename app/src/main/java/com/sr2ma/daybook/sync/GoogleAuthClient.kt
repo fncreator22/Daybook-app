@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.sync
+package com.sr2ma.daybook.sync
 
 import android.content.Context
 import android.util.Log
@@ -67,7 +67,7 @@ class GoogleAuthClient(
             }
         } catch (e: GetCredentialException) {
             Log.w(TAG, "Sign-in failed: ${e.type}")
-            null
+            throw Exception(e.errorMessage?.toString() ?: "Sign-in failed (${e.type})")
         }
     }
 

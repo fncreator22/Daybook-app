@@ -47,6 +47,8 @@ fun SyncSettingsSection(
         LaunchedEffect(msg) { syncViewModel.consumeError() }
     }
 
+    val isPlaceholder = androidx.compose.ui.res.booleanResource(com.sr2ma.daybook.R.bool.google_auth_placeholder)
+
     Column(modifier = modifier) {
         SectionHeader(
             title = "Sync & Backup",
@@ -60,7 +62,17 @@ fun SyncSettingsSection(
                     text = "Google account",
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                if (state.isSignedIn) {
+                if (isPlaceholder) {
+                    Text(
+                        text = "Google sign-in requires setup — see Settings → About",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {}, enabled = false) {
+                        Text("Sign in with Google")
+                    }
+                } else if (state.isSignedIn) {
                     Text(
                         text = state.accountEmail ?: "",
                         style = MaterialTheme.typography.bodyMedium,

@@ -168,14 +168,14 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
     }
 
     // Collect the voice flow while isListening == true.
-    LaunchedEffect(state.isListening) {
+    LaunchedEffect(state.isListening, state.voiceRetried) {
         if (state.isListening) {
             voiceCaptureManager.listen().collect { result ->
                 when (result) {
                     is VoiceCaptureManager.VoiceResult.Success -> viewModel.onVoiceResult(result.text)
                     is VoiceCaptureManager.VoiceResult.NoMatch -> viewModel.onVoiceNoMatch()
                     is VoiceCaptureManager.VoiceResult.Unavailable -> viewModel.onVoiceNoMatch()
-                    is VoiceCaptureManager.VoiceResult.Error -> viewModel.onVoiceNoMatch()
+                    is VoiceCaptureManager.VoiceResult.Error -> viewModel.onVoiceError(result.code)
                 }
             }
         }
@@ -183,7 +183,7 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
 
     // Listening overlay — shown while mic is active, with a Stop button.
     if (state.isListening) {
-        ListeningSheet(onStop = viewModel::onVoiceNoMatch)
+        ListeningSheet(message = state.voiceRetryMessage, onStop = viewModel::onVoiceStop)
     }
 
     // Confirmation sheet shown after recognition completes.
@@ -460,7 +460,7 @@ private fun VoiceAgentButton(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ListeningSheet(onStop: () -> Unit) {
+private fun ListeningSheet(message: String?, onStop: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Three dots bounce with staggered timing to suggest a waveform.
@@ -491,7 +491,7 @@ private fun ListeningSheet(onStop: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = stringResource(R.string.voice_listening),
+                text = message ?: stringResource(R.string.voice_listening),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
             )

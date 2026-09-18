@@ -207,20 +207,47 @@ class DaybookViewModel(
     // ---- Voice agent --------------------------------------------------------
 
     /** Called by the UI when mic button is pressed; sets the listening flag. */
-    fun startListening() = update { it.copy(isListening = true, voiceResult = null) }
+    fun startListening() = update { it.copy(isListening = true, voiceResult = null, voiceRetried = false, voiceRetryMessage = null) }
 
     /** Called when SpeechRecognizer returns a result (or error). */
     fun onVoiceResult(text: String) {
         val parsed = NaturalLanguageParser.parse(text, referenceDate = _state.value.today)
-        update { it.copy(isListening = false, voiceResult = VoiceAgentResult(text, parsed)) }
+        update { it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null, voiceResult = VoiceAgentResult(text, parsed)) }
     }
 
     /** Called when SpeechRecognizer returns nothing (silence timeout, no match, error). */
-    fun onVoiceNoMatch() = update {
-        it.copy(
-            isListening = false,
-            message = nextMessage(R.string.voice_error_no_match),
-        )
+    fun onVoiceNoMatch() {
+        val current = _state.value
+        if (!current.voiceRetried) {
+            update {
+                it.copy(
+                    voiceRetried = true,
+                    voiceRetryMessage = "Didn't catch that — try speaking again"
+                )
+            }
+        } else {
+            update {
+                it.copy(
+                    isListening = false,
+                    voiceRetried = false,
+                    voiceRetryMessage = null,
+                    message = nextMessage(R.string.voice_error_no_match),
+                )
+            }
+        }
+    }
+
+    fun onVoiceStop() = update {
+        it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null)
+    }
+
+    fun onVoiceError(code: Int) = update {
+        val msg = if (code == android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+            nextMessage(R.string.mic_permission_denied)
+        } else {
+            nextMessage(R.string.voice_error_no_match)
+        }
+        it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null, message = msg)
     }
 
     /** User tapped "Add it" on the confirmation sheet — commit to DB. */
