@@ -1,7 +1,6 @@
 package com.sr2ma.daybook.sync
 
 import android.content.Context
-import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -59,14 +58,11 @@ class GoogleAuthClient(
                 val email = googleIdTokenCredential.id
                 // Store email — never store the ID token itself in a log
                 syncPrefs.accountEmail = email
-                Log.d(TAG, "Sign-in successful")
                 email
             } else {
-                Log.w(TAG, "Unexpected credential type: ${credential.type}")
                 null
             }
         } catch (e: GetCredentialException) {
-            Log.w(TAG, "Sign-in failed: ${e.type}")
             throw Exception(e.errorMessage?.toString() ?: "Sign-in failed (${e.type})")
         }
     }
@@ -82,10 +78,6 @@ class GoogleAuthClient(
             // Not a fatal error — we still clear local state below.
         }
         syncPrefs.clearAuth()
-        Log.d(TAG, "Sign-out complete")
-    }
-
-    companion object {
-        private const val TAG = "GoogleAuthClient"
     }
 }
+

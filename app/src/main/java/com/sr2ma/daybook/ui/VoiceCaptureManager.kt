@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.util.Log
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -55,13 +54,10 @@ class VoiceCaptureManager(private val context: Context) {
             android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
         ) {
-            Log.d(TAG, "Using on-device recognizer")
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         } else if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            Log.d(TAG, "Using default recognizer (may use network)")
             SpeechRecognizer.createSpeechRecognizer(context)
         } else {
-            Log.w(TAG, "No speech recognizer available")
             trySend(VoiceResult.Unavailable)
             close()
             return@callbackFlow
@@ -95,7 +91,6 @@ class VoiceCaptureManager(private val context: Context) {
                 close()
             }
             override fun onError(error: Int) {
-                Log.w(TAG, "Recognition error $error")
                 when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH,
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> trySend(VoiceResult.NoMatch)
@@ -119,11 +114,6 @@ class VoiceCaptureManager(private val context: Context) {
         awaitClose {
             recognizer.stopListening()
             recognizer.destroy()
-            Log.d(TAG, "SpeechRecognizer destroyed")
         }
-    }
-
-    companion object {
-        private const val TAG = "VoiceCaptureManager"
     }
 }

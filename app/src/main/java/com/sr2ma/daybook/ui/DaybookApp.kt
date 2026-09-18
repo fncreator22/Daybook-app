@@ -167,14 +167,21 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
     val micPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) viewModel.startListening()
+        if (granted) {
+            viewModel.startListening()
+        } else {
+            viewModel.onVoiceError(android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+        }
     }
 
     fun launchMic() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-        } else {
+        val alreadyGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (alreadyGranted) {
             viewModel.startListening()
+        } else {
+            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
         }
     }
 

@@ -42,7 +42,8 @@ fun SyncSettingsSection(
 ) {
     val state by syncViewModel.state.collectAsState()
 
-    val isPlaceholder = androidx.compose.ui.res.booleanResource(com.sr2ma.daybook.R.bool.google_auth_placeholder)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val googleAuthConfigured = !context.resources.getBoolean(com.sr2ma.daybook.R.bool.google_auth_placeholder)
 
     Column(modifier = modifier) {
         SectionHeader(
@@ -57,9 +58,9 @@ fun SyncSettingsSection(
                     text = "Google account",
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                if (isPlaceholder) {
+                if (!googleAuthConfigured) {
                     Text(
-                        text = "Google sign-in requires setup — see Settings → About",
+                        text = "Google sync requires setup — see AGENTS.md for OAuth steps",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
