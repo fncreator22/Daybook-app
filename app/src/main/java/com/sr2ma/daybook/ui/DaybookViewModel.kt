@@ -309,20 +309,38 @@ class DaybookViewModel(
         val result = _state.value.voiceResult ?: return
         update { it.copy(voiceResult = null) }
         val parsed: ParseResult = result.parseResult
+        val today = _state.value.today
         when (parsed.intent) {
             ParsedIntent.CREATE_TASK -> {
-                val title = parsed.taskTitle ?: result.spokenText
-                write { repository.saveTask(Task(title = title, dueDate = parsed.dueDate)) }
+                val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: result.spokenText
+                write {
+                    repository.saveTask(
+                        Task(
+                            title    = title,
+                            priority = parsed.priority,
+                            dueDate  = parsed.dueDate,
+                        )
+                    )
+                }
             }
             ParsedIntent.CREATE_LOG -> {
-                val body = parsed.logBody ?: result.spokenText
-                write { repository.saveLogEntry(LogEntry(body = body, kind = parsed.logKind, day = _state.value.today)) }
+                val body = parsed.logBody?.takeIf { it.isNotBlank() } ?: result.spokenText
+                write {
+                    repository.saveLogEntry(
+                        LogEntry(body = body, kind = parsed.logKind, day = today)
+                    )
+                }
             }
             ParsedIntent.CREATE_MEETING -> {
-                val title = parsed.meetingTitle ?: result.spokenText
-                write { repository.saveMeeting(Meeting(title = title, day = _state.value.today)) }
+                val title = parsed.meetingTitle?.takeIf { it.isNotBlank() } ?: result.spokenText
+                // Use the parser-extracted date if present, fall back to today
+                val day = parsed.dueDate ?: today
+                write {
+                    repository.saveMeeting(Meeting(title = title, day = day))
+                }
             }
             ParsedIntent.UNKNOWN -> {
+                // Treat as a plain task so nothing the user says is ever silently lost
                 write { repository.saveTask(Task(title = result.spokenText)) }
             }
         }

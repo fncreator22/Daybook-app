@@ -3,6 +3,7 @@ package com.sr2ma.daybook.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,7 +57,10 @@ fun LogScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        TopAppBar(title = { Text(stringResource(R.string.log_title)) })
+        TopAppBar(
+            title = { Text(stringResource(R.string.log_title)) },
+            windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+        )
 
         FilterChipRow(
             options = kinds,

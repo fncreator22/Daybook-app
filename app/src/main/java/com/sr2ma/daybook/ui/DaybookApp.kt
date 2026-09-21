@@ -616,14 +616,15 @@ private fun VoiceResultSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val parsed = result.parseResult
 
-    val intentLabel = when (result.parseResult.intent) {
+    val intentLabel = when (parsed.intent) {
         ParsedIntent.CREATE_TASK ->
-            stringResource(R.string.voice_intent_task, result.parseResult.taskTitle ?: result.spokenText)
+            stringResource(R.string.voice_intent_task, parsed.taskTitle ?: result.spokenText)
         ParsedIntent.CREATE_LOG ->
-            stringResource(R.string.voice_intent_log, result.parseResult.logBody ?: result.spokenText)
+            stringResource(R.string.voice_intent_log, parsed.logBody ?: result.spokenText)
         ParsedIntent.CREATE_MEETING ->
-            stringResource(R.string.voice_intent_meeting, result.parseResult.meetingTitle ?: result.spokenText)
+            stringResource(R.string.voice_intent_meeting, parsed.meetingTitle ?: result.spokenText)
         ParsedIntent.UNKNOWN ->
             stringResource(R.string.voice_intent_task, result.spokenText)
     }
@@ -653,6 +654,37 @@ private fun VoiceResultSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // ── Parsed metadata chips ──────────────────────────────────────
+            val detailLines = buildList {
+                parsed.dueDate?.let { date ->
+                    add("\uD83D\uDCC5 ${date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }}, ${date.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}")
+                }
+                if (parsed.priority != com.sr2ma.daybook.domain.model.Priority.MEDIUM) {
+                    val badge = when (parsed.priority) {
+                        com.sr2ma.daybook.domain.model.Priority.URGENT -> "\uD83D\uDD34 Urgent"
+                        com.sr2ma.daybook.domain.model.Priority.HIGH   -> "\uD83D\uDFE0 High priority"
+                        com.sr2ma.daybook.domain.model.Priority.LOW    -> "\u26AA Low priority"
+                        else -> null
+                    }
+                    if (badge != null) add(badge)
+                }
+                if (parsed.meetingAttendees.isNotEmpty()) {
+                    add("\uD83D\uDC65 With: ${parsed.meetingAttendees.joinToString(", ")}")
+                }
+            }
+            if (detailLines.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                detailLines.forEach { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+
             Spacer(Modifier.height(24.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onDismiss) {

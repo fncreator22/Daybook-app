@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,7 +63,10 @@ fun SettingsScreen(
     var askDeleteAll by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxSize()) {
-        TopAppBar(title = { Text(stringResource(R.string.settings_title)) })
+        TopAppBar(
+            title = { Text(stringResource(R.string.settings_title)) },
+            windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+        )
 
         // Export and import both hit the disk through a content provider, which can
         // take a moment on a large file; this is the only feedback until the
