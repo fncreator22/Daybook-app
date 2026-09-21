@@ -127,7 +127,7 @@ Symptom: "Add a task for todayAEa,Not..." / "ListeningAEa,Not..." on device
 Root cause: UTF-8 multi-byte chars (ellipsis, curly quotes, em-dash) double-encoded on Windows
 Fix: Replace all non-ASCII chars in strings.xml with XML entities (&#8230; for ..., etc.) or plain ASCII
 Files: app/src/main/res/values/strings.xml
-Status: PENDING
+Status: DONE
 
 ### BUG-002 -- Mic stops immediately ~1s, shows "Couldn't catch that" [HIGH]
 Symptom: ListeningSheet appears then closes in ~1s; user cannot speak
@@ -143,14 +143,14 @@ Fix:
      EXTRA_PREFER_OFFLINE=true hint is sufficient; on-device will be used if available
   3. On retry: delay(500ms) before starting next recognition attempt
 Files: ui/DaybookApp.kt (LaunchedEffect), ui/VoiceCaptureManager.kt
-Status: PENDING
+Status: DONE
 
 ### FEAT-001 -- Wallet: Upload image from gallery for barcode parsing [MEDIUM]
 Request: Third option "Upload image" in WalletAddMenu
 Pipeline: image picker -> ML Kit barcode scanner -> ML Kit OCR -> pre-fill PassSheet
 If fields missing: PassSheet shows with empty fields, user fills manually
 Files: ui/screens/WalletScreen.kt, ui/editors/PassConfirmSheet.kt, domain/PassParser.kt
-Status: PENDING
+Status: DONE
 
 ---
 
@@ -162,7 +162,7 @@ Status: PENDING
 | 2026-09-17 | 2 | Phase 4 (Google sync), Phase 7 (WhatsApp), autonomy levels, voice FAB |
 | 2026-09-18 | 3 | Security audit: network_security_config, Log removal, backup exclusions, versionCode 1->2 |
 | 2026-09-18 | 4 | Mic fixes (API guard, fallback), Google auth placeholder, privacy string |
-| 2026-09-19/21 | 5 | IN PROGRESS: BUG-001 mojibake, BUG-002 mic immediate stop, FEAT-001 wallet image upload |
+| 2026-09-19/21 | 5 | DONE: BUG-001 mojibake, BUG-002 mic immediate stop, FEAT-001 wallet image upload (commit 210d352) |
 
 ---
 
@@ -174,3 +174,4 @@ Status: PENDING
 4. Check section 5 (DB version -- never regress, always add migration)
 5. Build with section 2 command to confirm baseline green before changes
 6. Update sections 8 and 9 after every task
+
