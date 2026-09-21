@@ -50,17 +50,22 @@ class VoiceCaptureManager(private val context: Context) {
      * Must be called from the Main thread (SpeechRecognizer requirement).
      */
     fun listen(): Flow<VoiceResult> = callbackFlow {
-        val recognizer: SpeechRecognizer = if (
+        // Use the system-default recognizer (network-backed) as primary — it is reliable
+        // on every Android device regardless of on-device model availability.
+        // EXTRA_PREFER_OFFLINE below tells the service to use on-device if it can.
+        // createOnDeviceSpeechRecognizer() is the fallback only if the system default
+        // is genuinely absent (no Google app or no speech service installed).
+        val recognizer: SpeechRecognizer = when {
+            SpeechRecognizer.isRecognitionAvailable(context) ->
+                SpeechRecognizer.createSpeechRecognizer(context)
             android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-        ) {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        } else if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        } else {
-            trySend(VoiceResult.Unavailable)
-            close()
-            return@callbackFlow
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context) ->
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+            else -> {
+                trySend(VoiceResult.Unavailable)
+                close()
+                return@callbackFlow
+            }
         }
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {

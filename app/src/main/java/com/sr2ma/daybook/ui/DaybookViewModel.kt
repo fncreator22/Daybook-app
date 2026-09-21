@@ -204,6 +204,62 @@ class DaybookViewModel(
         ) { repository.deletePass(pass) }
     }
 
+    /**
+     * Processes a gallery image URI through ML Kit barcode scanner + OCR and
+     * opens PassSheet with whatever was found. If no barcode is detected the sheet
+     * still opens so the user can type everything manually; a snackbar explains.
+     */
+    fun onGalleryImageSelected(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch {
+            update { it.copy(busy = true) }
+            try {
+                val image = withContext(Dispatchers.IO) {
+                    com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+                }
+
+                val barcodesDeferred = kotlinx.coroutines.CompletableDeferred<List<com.google.mlkit.vision.barcode.common.Barcode>>()
+                com.google.mlkit.vision.barcode.BarcodeScanning.getClient().process(image)
+                    .addOnSuccessListener { barcodesDeferred.complete(it) }
+                    .addOnFailureListener { barcodesDeferred.complete(emptyList()) }
+                val barcodes = barcodesDeferred.await()
+
+                val ocrDeferred = kotlinx.coroutines.CompletableDeferred<String>()
+                com.google.mlkit.vision.text.TextRecognition.getClient(
+                    com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+                ).process(image)
+                    .addOnSuccessListener { ocrDeferred.complete(it.text) }
+                    .addOnFailureListener { ocrDeferred.complete("") }
+                val ocrText = ocrDeferred.await()
+
+                val first = barcodes.firstOrNull()
+                val seed = Pass(
+                    title = "",
+                    barcodeValue = first?.rawValue ?: "",
+                    barcodeFormat = first?.let { barcodeFormatName(it.format) } ?: "",
+                    ocrText = ocrText.take(500),
+                )
+                update { it.copy(busy = false, editor = Editor.PassSheet(seed)) }
+                if (first == null) {
+                    update { it.copy(message = nextMessage(R.string.wallet_no_barcode)) }
+                }
+            } catch (_: Exception) {
+                update { it.copy(busy = false, message = nextMessage(R.string.wallet_no_barcode)) }
+            }
+        }
+    }
+
+    private fun barcodeFormatName(format: Int): String = when (format) {
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE    -> "QR_CODE"
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_EAN_13     -> "EAN_13"
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_EAN_8      -> "EAN_8"
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODE_128   -> "CODE_128"
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_CODE_39    -> "CODE_39"
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_PDF417     -> "PDF417"
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_AZTEC      -> "AZTEC"
+        com.google.mlkit.vision.barcode.common.Barcode.FORMAT_DATA_MATRIX-> "DATA_MATRIX"
+        else                                                               -> "UNKNOWN"
+    }
+
     // ---- Voice agent --------------------------------------------------------
 
     /** Called by the UI when mic button is pressed; sets the listening flag. */
@@ -216,25 +272,21 @@ class DaybookViewModel(
     }
 
     /** Called when SpeechRecognizer returns nothing (silence timeout, no match, error). */
-    fun onVoiceNoMatch() {
-        val current = _state.value
-        if (!current.voiceRetried) {
-            update {
-                it.copy(
-                    voiceRetried = true,
-                    voiceRetryMessage = "Didn't catch that — try speaking again"
-                )
-            }
-        } else {
-            update {
-                it.copy(
-                    isListening = false,
-                    voiceRetried = false,
-                    voiceRetryMessage = null,
-                    message = nextMessage(R.string.voice_error_no_match),
-                )
-            }
-        }
+    fun onVoiceNoMatch() = update {
+        it.copy(
+            isListening = false,
+            voiceRetried = false,
+            voiceRetryMessage = null,
+            message = nextMessage(R.string.voice_error_no_match),
+        )
+    }
+
+    /**
+     * Called after the first recognition failure to show a hint in ListeningSheet
+     * without closing it. Retry is handled by the LaunchedEffect in DaybookApp.kt.
+     */
+    fun setRetryMessage() = update {
+        it.copy(voiceRetryMessage = "Didn't catch that - try again")
     }
 
     fun onVoiceStop() = update {

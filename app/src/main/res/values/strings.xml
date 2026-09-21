@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Daybook</string>
 
@@ -27,7 +27,7 @@
     <string name="error_delete_failed">Could not delete that</string>
 
     <!-- Today -->
-    <string name="today_quick_add_hint">Add a task for todayÃ¢â‚¬Â¦</string>
+    <string name="today_quick_add_hint">Add a task for today...</string>
     <string name="today_section_overdue">Overdue</string>
     <string name="today_section_due_today">Due today</string>
     <string name="today_section_in_progress">In progress</string>
@@ -90,7 +90,7 @@
     <string name="log_new">New log entry</string>
     <string name="log_edit">Edit log entry</string>
     <string name="log_field_body">What happened?</string>
-    <string name="log_field_body_hint">Shipped the export flow, blocked on API keysÃ¢â‚¬Â¦</string>
+    <string name="log_field_body_hint">Shipped the export flow, blocked on API keys...</string>
     <string name="log_field_kind">Kind</string>
     <string name="log_field_day">Day</string>
     <string name="log_body_required">Write something first</string>
@@ -157,7 +157,7 @@
     <string name="settings_stat_meetings">Meetings</string>
     <string name="settings_section_about">About</string>
     <string name="settings_version">Version %1$s</string>
-    <string name="settings_privacy_body">Daybook stores everything on-device in an encrypted database. Camera is used only for barcode scanning; microphone for voice commands only. Internet is used only for the optional model download and Google sync — both are strictly opt-in and off by default. No data is sent anywhere without your explicit action.</string>
+    <string name="settings_privacy_body">Daybook stores everything on-device in an encrypted database. Camera is used only for barcode scanning; microphone for voice commands only. Internet is used only for the optional model download and Google sync - both are strictly opt-in and off by default. No data is sent anywhere without your explicit action.</string>
     <string name="settings_export_success">Backup saved</string>
     <string name="settings_export_failure">Could not save the backup</string>
     <string name="settings_import_success">Imported %1$d tasks, %2$d log entries, %3$d meetings</string>
@@ -219,12 +219,12 @@
     <string name="camera_permission_denied">Camera access is required to scan barcodes. Please grant it in Settings.</string>
     <string name="camera_permission_open_settings">Open Settings</string>
     <!-- Microphone / Voice agent permission -->
-    <string name="mic_permission_rationale">Daybook uses your microphone to understand voice commands Ã¢â‚¬â€ "add task buy milk" or "log meeting with design team". Speech is processed entirely on-device and never stored.</string>
+    <string name="mic_permission_rationale">Daybook uses your microphone to understand voice commands - \"add task buy milk\" or \"log meeting with design team\". Speech is processed entirely on-device and never stored.</string>
     <string name="mic_permission_denied">Microphone access is required for voice input. Please grant it in Settings.</string>
 
     <!-- Voice agent button + result sheet -->
     <string name="cd_voice_agent">Speak to agent</string>
-    <string name="voice_listening">ListeningÃ¢â‚¬Â¦</string>
+    <string name="voice_listening">Listening...</string>
     <string name="voice_result_title">I heard</string>
     <string name="voice_result_confirm">Add it</string>
     <string name="voice_result_dismiss">Dismiss</string>
@@ -239,6 +239,8 @@
     <!-- Wallet add dialog -->
     <string name="wallet_add_scan">Scan barcode / QR code</string>
     <string name="wallet_add_manual">Add manually</string>
+    <string name="wallet_add_upload">Upload image</string>
+    <string name="wallet_add_upload_body">Pick a photo or screenshot to scan</string>
     <!-- Phase 7: WhatsApp Reader -->
     <string name="whatsapp_reader_label">WhatsApp Reader</string>
 

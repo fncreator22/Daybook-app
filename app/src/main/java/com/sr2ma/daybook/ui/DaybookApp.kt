@@ -186,16 +186,41 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
     }
 
     // Collect the voice flow while isListening == true.
-    LaunchedEffect(state.isListening, state.voiceRetried) {
-        if (state.isListening) {
+    // Key ONLY on isListening — retry is handled inside the coroutine with a pause.
+    // Keying on voiceRetried too caused a double-fire: the recognizer emitted
+    // ERROR_NO_MATCH immediately, voiceRetried flipped, the effect restarted,
+    // the second attempt also failed instantly, and the sheet closed before the
+    // user could speak.
+    LaunchedEffect(state.isListening) {
+        if (!state.isListening) return@LaunchedEffect
+        var attempts = 0
+        var keepGoing = true
+        while (keepGoing && attempts < 2) {
+            var shouldRetry = false
             voiceCaptureManager.listen().collect { result ->
                 when (result) {
-                    is VoiceCaptureManager.VoiceResult.Success -> viewModel.onVoiceResult(result.text)
-                    is VoiceCaptureManager.VoiceResult.NoMatch -> viewModel.onVoiceNoMatch()
-                    is VoiceCaptureManager.VoiceResult.Unavailable -> viewModel.onVoiceNoMatch()
-                    is VoiceCaptureManager.VoiceResult.Error -> viewModel.onVoiceError(result.code)
+                    is VoiceCaptureManager.VoiceResult.Success ->
+                        viewModel.onVoiceResult(result.text)
+                    is VoiceCaptureManager.VoiceResult.NoMatch,
+                    is VoiceCaptureManager.VoiceResult.Unavailable -> {
+                        if (attempts == 0) {
+                            // First failure: show message and retry after a short pause.
+                            viewModel.setRetryMessage()
+                            shouldRetry = true
+                        } else {
+                            // Second failure: give up and show snackbar.
+                            viewModel.onVoiceNoMatch()
+                            keepGoing = false
+                        }
+                    }
+                    is VoiceCaptureManager.VoiceResult.Error -> {
+                        viewModel.onVoiceError((result as VoiceCaptureManager.VoiceResult.Error).code)
+                        keepGoing = false
+                    }
                 }
             }
+            attempts++
+            if (shouldRetry && keepGoing) kotlinx.coroutines.delay(600L)
         }
     }
 
@@ -391,11 +416,18 @@ private fun AddButton(tab: DaybookTab, viewModel: DaybookViewModel) {
 
 /**
  * Small FAB for the Wallet tab. Tapping it shows a dialog offering
- * "Scan barcode" or "Add manually" so no camera is ever forced.
+ * "Scan barcode", "Add manually", or "Upload image from gallery".
  */
 @Composable
 private fun WalletAddMenu(viewModel: DaybookViewModel) {
     var showDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) viewModel.onGalleryImageSelected(context.applicationContext, uri)
+    }
 
     androidx.compose.material3.SmallFloatingActionButton(onClick = { showDialog = true }) {
         Icon(
@@ -418,6 +450,10 @@ private fun WalletAddMenu(viewModel: DaybookViewModel) {
                         showDialog = false
                         viewModel.newPassManual()
                     }) { Text(stringResource(R.string.wallet_add_manual)) }
+                    TextButton(onClick = {
+                        showDialog = false
+                        galleryLauncher.launch("image/*")
+                    }) { Text(stringResource(R.string.wallet_add_upload)) }
                 }
             },
             confirmButton = {},
