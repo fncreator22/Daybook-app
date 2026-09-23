@@ -129,6 +129,19 @@ fun TodayScreen(
                 )
             }
             boardSection(
+                titleRes = R.string.today_section_upcoming,
+                rows = board.upcoming,
+                keyPrefix = "upcoming",
+                idOf = { it.id },
+            ) { task ->
+                TaskRow(
+                    task = task,
+                    today = state.today,
+                    onToggleDone = { viewModel.toggleTaskDone(task) },
+                    onClick = { viewModel.editTask(task) },
+                )
+            }
+            boardSection(
                 titleRes = R.string.today_section_meetings,
                 rows = board.meetings,
                 keyPrefix = "meeting",

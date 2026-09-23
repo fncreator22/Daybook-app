@@ -1,7 +1,6 @@
-package com.sr2ma.daybook.ai
+﻿package com.sr2ma.daybook.ai
 
 import android.content.Context
-import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Uses reflection to load com.google.ai.edge.litertlm.LlmInference at runtime
  * so the app compiles and runs even if the litertlm artifact is absent/mismatched.
  *
- * AGENTS.md non-negotiables — all enforced:
+ * AGENTS.md non-negotiables â€” all enforced:
  * 1. LAZY-LOAD: engine created on first AI-feature use, never at app start.
  * 2. IDLE RELEASE: closed after 3 minutes of inactivity.
  * 3. SINGLE QUEUE: one Mutex, concurrent calls queue, never parallel.
@@ -34,13 +33,13 @@ class LlmEngine(
         data class Failure(val cause: Throwable) : InferResult
     }
 
-    // ── State ─────────────────────────────────────────────────────────────────
+    // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private val mutex = Mutex()
     /** Held as Any? so we never take a compile-time dep on LlmInference. */
     private var engine: Any? = null
     private val lastUseMs = AtomicLong(0L)
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     suspend fun infer(prompt: String): InferResult = mutex.withLock {
         lastUseMs.set(System.currentTimeMillis())
@@ -51,7 +50,7 @@ class LlmEngine(
         try {
             val llm = getOrCreate(modelFile)
                 ?: return@withLock InferResult.Failure(
-                    IllegalStateException("LlmInference class not found — litertlm not on classpath")
+                    IllegalStateException("LlmInference class not found â€” litertlm not on classpath")
                 )
             withTimeout(TIMEOUT_MS) {
                 val result = generateResponse(llm, prompt)
@@ -59,13 +58,11 @@ class LlmEngine(
                 InferResult.Success(result)
             }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            Log.w(TAG, "Inference timed out after ${TIMEOUT_MS}ms — releasing engine")
             releaseEngine()
             InferResult.Timeout
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Inference failed", e)
             releaseEngine()
             InferResult.Failure(e)
         }
@@ -74,14 +71,13 @@ class LlmEngine(
     fun tickIdleCheck() {
         val idle = System.currentTimeMillis() - lastUseMs.get()
         if (engine != null && idle >= IDLE_RELEASE_MS) {
-            Log.d(TAG, "LLM engine idle for ${idle / 1000}s — releasing")
             releaseEngine()
         }
     }
 
     fun release() = releaseEngine()
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Loads the LlmInference engine via reflection.
@@ -93,7 +89,6 @@ class LlmEngine(
             val clazz = Class.forName("com.google.ai.edge.litertlm.LlmInference")
             val optionsClass = clazz.classes.firstOrNull { it.simpleName == "Options" }
             if (optionsClass == null) {
-                Log.e(TAG, "LlmInference.Options not found"); return null
             }
             // LlmInference.Options.builder().setModelPath(...).setMaxTokens(...).build()
             val builder = optionsClass.getMethod("builder").invoke(null)
@@ -104,12 +99,9 @@ class LlmEngine(
             val options = builder.javaClass.getMethod("build").invoke(builder)
             val instance = clazz.getMethod("createFromOptions", Context::class.java, optionsClass)
                 .invoke(null, context, options)
-            Log.d(TAG, "LlmInference engine created from ${modelFile.name}")
             instance.also { engine = it }
         } catch (e: ClassNotFoundException) {
-            Log.w(TAG, "litertlm not on classpath — AI infer disabled"); null
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create LlmInference", e); null
         }
     }
 

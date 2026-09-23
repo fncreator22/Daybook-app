@@ -1,10 +1,9 @@
-package com.sr2ma.daybook.whatsapp
+﻿package com.sr2ma.daybook.whatsapp
 
 import android.content.ComponentName
 import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
 import com.sr2ma.daybook.data.DaybookDatabase
 import com.sr2ma.daybook.data.dao.WhatsAppDao
 import com.sr2ma.daybook.domain.model.WhatsAppMessage
@@ -18,7 +17,7 @@ import kotlinx.coroutines.launch
  *
  * Only activated when the user has:
  *  1. Enabled "WhatsApp Reader" in Settings (stored in SharedPreferences).
- *  2. Granted Notification Access in Android Settings → Apps → Special app access.
+ *  2. Granted Notification Access in Android Settings â†’ Apps â†’ Special app access.
  *
  * What we read: the notification title (sender display name) and text (message preview).
  * We do NOT access WhatsApp's database, content providers, or any other private data.
@@ -35,7 +34,6 @@ class WhatsAppListenerService : NotificationListenerService() {
     override fun onCreate() {
         super.onCreate()
         dao = WhatsAppDao(DaybookDatabase.getInstance(applicationContext))
-        Log.d(TAG, "NotificationListenerService started")
     }
 
     override fun onDestroy() {
@@ -74,7 +72,7 @@ class WhatsAppListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        // No action needed — we keep the message log even after notification is dismissed.
+        // No action needed â€” we keep the message log even after notification is dismissed.
     }
 
     companion object {

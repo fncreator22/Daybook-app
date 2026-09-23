@@ -1,5 +1,6 @@
 package com.sr2ma.daybook
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -48,6 +49,17 @@ class MainActivity : ComponentActivity() {
                 DaybookApp(viewModel, syncViewModel)
             }
         }
+        // Handle text share from Gmail / WhatsApp / browser at startup
+        handleShareIntent(intent)
+    }
+
+    /**
+     * Called when Daybook is already in the back stack and the user shares new text into it.
+     * Without this override, a second share would re-use the stale Intent from onCreate.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleShareIntent(intent)
     }
 
     /**
@@ -58,5 +70,16 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshToday()
+    }
+
+    // ── Share Intent ─────────────────────────────────────────────────────────
+
+    private fun handleShareIntent(incoming: Intent?) {
+        if (incoming?.action != Intent.ACTION_SEND) return
+        if (incoming.type != "text/plain") return
+        val text = incoming.getStringExtra(Intent.EXTRA_TEXT)?.trim() ?: return
+        if (text.isBlank()) return
+        // Route through NLP → shows VoiceResultSheet confirmation card just like voice.
+        viewModel.confirmFromShare(text)
     }
 }

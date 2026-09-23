@@ -1,10 +1,9 @@
-package com.sr2ma.daybook.ai
+﻿package com.sr2ma.daybook.ai
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -16,7 +15,7 @@ import java.nio.LongBuffer
  * The model file (`minilm-l6-v2-int8.onnx`) must be placed in `assets/`.
  * It is bundled in the APK (~22 MB) and is never downloaded at runtime.
  *
- * The tokenizer is a minimal whitespace + subword approximation — sufficient
+ * The tokenizer is a minimal whitespace + subword approximation â€” sufficient
  * for semantic similarity over short task/meeting/log texts. For production
  * quality, replace [tokenize] with a proper BERT WordPiece tokenizer library.
  *
@@ -28,7 +27,7 @@ class EmbeddingEngine(private val context: Context) {
     private var ortEnv: OrtEnvironment? = null
     private var session: OrtSession? = null
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Returns a 384-dim L2-normalised float embedding for [text], or null if
@@ -55,7 +54,7 @@ class EmbeddingEngine(private val context: Context) {
             )
 
             val result = s.run(inputs)
-            // MiniLM output: [1, seq_len, 384] — mean-pool over seq dimension
+            // MiniLM output: [1, seq_len, 384] â€” mean-pool over seq dimension
             val output = (result[0].value as Array<*>)[0] as Array<*>
             val pooled = meanPool(output, attentionMask)
             val normalised = l2Normalise(pooled)
@@ -65,7 +64,6 @@ class EmbeddingEngine(private val context: Context) {
 
             normalised
         } catch (e: Exception) {
-            Log.e(TAG, "Embedding failed", e)
             null
         }
     }
@@ -78,14 +76,13 @@ class EmbeddingEngine(private val context: Context) {
         ortEnv = null
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun getOrCreateSession(): OrtSession? {
         session?.let { return it }
         val modelBytes = runCatching {
             context.assets.open(MODEL_ASSET).readBytes()
         }.getOrElse {
-            Log.e(TAG, "MiniLM model asset not found: $MODEL_ASSET")
             return null
         }
         val env = OrtEnvironment.getEnvironment().also { ortEnv = it }
@@ -96,7 +93,7 @@ class EmbeddingEngine(private val context: Context) {
     /**
      * Minimal whitespace tokenizer that maps text to BERT vocabulary IDs.
      *
-     * This is a placeholder — replace with a full BERT WordPiece tokenizer
+     * This is a placeholder â€” replace with a full BERT WordPiece tokenizer
      * (e.g. via a bundled vocab.txt) for production accuracy.
      *
      * Returns triple of (input_ids, attention_mask, token_type_ids), all Long arrays.

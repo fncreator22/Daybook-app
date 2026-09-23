@@ -23,15 +23,19 @@ data class TodayBoard(
     val followUps: List<Meeting> = emptyList(),
     val log: List<LogEntry> = emptyList(),
     val completedToday: Int = 0,
+    /** Open tasks with no due date — shown as "Upcoming" (max 5 to keep screen light). */
+    val upcoming: List<Task> = emptyList(),
 ) {
     /** True when there is genuinely nothing to show, so the empty state can take over. */
     val isEmpty: Boolean
         get() = overdue.isEmpty() && dueToday.isEmpty() && inProgress.isEmpty() &&
-            meetings.isEmpty() && followUps.isEmpty() && log.isEmpty()
+            meetings.isEmpty() && followUps.isEmpty() && log.isEmpty() &&
+            upcoming.isEmpty()
 
     /** Count of things still asking for attention, for the tab badge. */
     val openCount: Int get() = overdue.size + dueToday.size + followUps.size
 }
+
 
 /**
  * Turns the three stored lists into a single day view.
@@ -52,6 +56,7 @@ object TodayBuilder {
         val overdue = mutableListOf<Task>()
         val dueToday = mutableListOf<Task>()
         val inProgress = mutableListOf<Task>()
+        val upcoming = mutableListOf<Task>()
         var completedToday = 0
 
         tasks.forEach { task ->
@@ -73,6 +78,9 @@ object TodayBuilder {
                 // Started but not due today: worth surfacing so it is not forgotten,
                 // and only once, which is why this branch comes last.
                 task.status == TaskStatus.IN_PROGRESS -> inProgress += task
+
+                // Open tasks with no due date — collect into "Upcoming" (cap 5).
+                task.isOpen && task.dueDate == null -> upcoming += task
             }
         }
 
@@ -100,6 +108,11 @@ object TodayBuilder {
             ),
             log = logEntries.filter { it.day == today }.sortedByDescending { it.createdAt },
             completedToday = completedToday,
+            // Highest priority first; cap at 5 to keep Today screen scannable.
+            upcoming = upcoming
+                .sortedByDescending { it.priority.storedValue }
+                .take(5),
         )
     }
+
 }

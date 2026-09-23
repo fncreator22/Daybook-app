@@ -349,6 +349,17 @@ class DaybookViewModel(
     /** User dismissed the confirmation sheet without saving. */
     fun dismissVoiceResult() = update { it.copy(voiceResult = null) }
 
+    /**
+     * Called from MainActivity when the user shares text from another app
+     * (Gmail, WhatsApp, browser) into Daybook. Runs the text through
+     * NaturalLanguageParser and shows the VoiceResultSheet confirmation card
+     * so the user can review before saving — identical UX to voice input.
+     */
+    fun confirmFromShare(text: String) {
+        val parsed = NaturalLanguageParser.parse(text, referenceDate = _state.value.today)
+        update { it.copy(voiceResult = VoiceAgentResult(text, parsed)) }
+    }
+
     // ---- Tasks -----------------------------------------------------------
 
 
@@ -358,11 +369,53 @@ class DaybookViewModel(
         write(onSuccess = { it.copy(editor = null) }) { repository.saveTask(task) }
     }
 
-    /** The one-line add field on Today: a task due today, everything else default. */
+    /**
+     * Smart quick-add: runs the text through NaturalLanguageParser so the user
+     * can type "meeting with Tom tomorrow" or "shipped the feature" in the quick-add
+     * field and have it correctly saved as a meeting or log entry, not a task.
+     */
     fun quickAddTask(title: String) {
         if (title.isBlank()) return
-        write { repository.saveTask(Task(title = title, dueDate = _state.value.today)) }
+        val today = _state.value.today
+        val parsed = com.sr2ma.daybook.domain.NaturalLanguageParser.parse(title, today)
+        when (parsed.intent) {
+            com.sr2ma.daybook.domain.ParsedIntent.CREATE_MEETING -> {
+                val day = parsed.dueDate ?: today
+                write {
+                    repository.saveMeeting(
+                        com.sr2ma.daybook.domain.model.Meeting(
+                            title = parsed.meetingTitle?.ifBlank { null } ?: title.trim(),
+                            attendees = parsed.meetingAttendees.joinToString(", "),
+                            day = day,
+                        )
+                    )
+                }
+            }
+            com.sr2ma.daybook.domain.ParsedIntent.CREATE_LOG -> {
+                write {
+                    repository.saveLogEntry(
+                        com.sr2ma.daybook.domain.model.LogEntry(
+                            day = today,
+                            body = parsed.logBody?.ifBlank { null } ?: title.trim(),
+                            kind = parsed.logKind,
+                        )
+                    )
+                }
+            }
+            else -> {
+                write {
+                    repository.saveTask(
+                        com.sr2ma.daybook.domain.model.Task(
+                            title = parsed.taskTitle?.ifBlank { null } ?: title.trim(),
+                            priority = parsed.priority,
+                            dueDate = parsed.dueDate ?: today,
+                        )
+                    )
+                }
+            }
+        }
     }
+
 
     /** Captures an action item from inside the meeting sheet, without leaving it. */
     fun addActionItem(meetingId: Long, title: String) {

@@ -2,6 +2,7 @@ package com.sr2ma.daybook
 
 import android.app.Application
 import android.content.Context
+import com.sr2ma.daybook.ai.BriefingNotificationWorker
 import com.sr2ma.daybook.ai.NightlyAgentWorker
 import com.sr2ma.daybook.data.DaybookDatabase
 import com.sr2ma.daybook.data.DaybookRepository
@@ -56,8 +57,11 @@ class DaybookApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Schedule the nightly rule-engine + optional AI job.
-        // Idempotent: WorkManager deduplicates using KEEP policy.
+        // Create notification channels before any worker fires (idempotent).
+        BriefingNotificationWorker.createChannels(this)
+        // Schedule nightly rule-engine + optional AI job.
         NightlyAgentWorker.schedule(this)
+        // Schedule morning briefing at 07:30 every day.
+        BriefingNotificationWorker.schedule(this)
     }
 }

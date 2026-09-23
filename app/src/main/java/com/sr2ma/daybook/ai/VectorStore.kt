@@ -1,14 +1,13 @@
-package com.sr2ma.daybook.ai
+﻿package com.sr2ma.daybook.ai
 
 import android.database.sqlite.SQLiteDatabase
-import android.util.Log
 
 /**
  * KNN semantic search over task/log/meeting text via sqlite-vec.
  *
  * sqlite-vec loads as a SQLite extension from the pre-compiled `.so` in
  * `jniLibs/arm64-v8a/`. If the library is absent, [isAvailable] returns
- * false and all methods no-op / return empty results — graceful degradation.
+ * false and all methods no-op / return empty results â€” graceful degradation.
  *
  * Schema (created by [ensureSchema]):
  * ```sql
@@ -32,11 +31,11 @@ class VectorStore(private val database: SQLiteDatabase) {
 
     /**
      * True if the sqlite-vec extension loaded successfully.
-     * False if the `.so` is absent (graceful degradation — no semantic search).
+     * False if the `.so` is absent (graceful degradation â€” no semantic search).
      */
     val isAvailable: Boolean = tryLoadExtension()
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Creates the `embeddings` virtual table if not already present.
@@ -55,7 +54,6 @@ class VectorStore(private val database: SQLiteDatabase) {
                 """.trimIndent(),
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create embeddings table", e)
         }
     }
 
@@ -75,7 +73,6 @@ class VectorStore(private val database: SQLiteDatabase) {
                 arrayOf(itemId, itemType, serializeVec(embedding)),
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to upsert embedding id=$itemId type=$itemType", e)
         }
     }
 
@@ -90,7 +87,6 @@ class VectorStore(private val database: SQLiteDatabase) {
                 arrayOf(itemId, itemType),
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to delete embedding id=$itemId", e)
         }
     }
 
@@ -135,18 +131,16 @@ class VectorStore(private val database: SQLiteDatabase) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "KNN query failed", e)
             emptyList()
         }
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun tryLoadExtension(): Boolean = try {
         database.execSQL("SELECT load_extension('libsqlitevec')")
         true
     } catch (e: Exception) {
-        Log.w(TAG, "sqlite-vec extension not available — semantic search disabled: ${e.message}")
         false
     }
 

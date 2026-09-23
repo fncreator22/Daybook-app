@@ -243,10 +243,38 @@
     <string name="wallet_add_upload_body">Pick a photo or screenshot to scan</string>
     <!-- Phase 7: WhatsApp Reader -->
     <string name="whatsapp_reader_label">WhatsApp Reader</string>
+    <!-- Today screen: upcoming tasks + stats row -->
+    <string name="today_section_upcoming">Upcoming</string>
+    <string name="today_stats_open">%1$d open</string>
+    <string name="today_stats_overdue">%1$d overdue</string>
+    <string name="today_stats_week">%1$d this week</string>
+
+    <!-- Smart share / import text from other apps -->
+    <string name="share_import_title">I understood</string>
+    <string name="share_import_confirm">Save it</string>
+    <string name="share_import_dismiss">Dismiss</string>
+
+    <!-- Pass: richer list display -->
+    <string name="pass_expires">Expires %1$s</string>
+    <string name="pass_barcode_preview">Code: %1$s</string>
+    <string name="pass_expiry_set">Expiry: %1$s</string>
+    <string name="pass_expiry_clear">Clear expiry</string>
+
+    <!-- Briefing notification channels -->
+    <string name="notif_channel_briefing_id" translatable="false">daybook_briefing</string>
+    <string name="notif_channel_briefing_name">Daily Briefing</string>
+    <string name="notif_channel_briefing_desc">Your morning agenda summary and reminders</string>
+    <string name="notif_briefing_title">Good morning \u2014 %1$s</string>
+    <string name="notif_briefing_ticker">Daybook daily briefing</string>
+    <string name="notif_action_snooze">Snooze 2h</string>
+    <string name="notif_channel_reminders_id" translatable="false">daybook_reminders</string>
+    <string name="notif_channel_reminders_name">Reminders</string>
+    <string name="notif_channel_reminders_desc">Task due dates, overdue alerts, and pass expiry warnings</string>
 
     <!-- Google OAuth client ID for Calendar + Drive sync (replace with real value from Google Cloud Console) -->
     <string name="google_server_client_id" translatable="false">YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com</string>
     <bool name="google_auth_placeholder">true</bool>
+
 </resources>
 
 

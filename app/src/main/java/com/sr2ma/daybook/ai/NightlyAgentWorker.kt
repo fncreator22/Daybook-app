@@ -1,11 +1,9 @@
 package com.sr2ma.daybook.ai
 
 import android.content.Context
-import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -31,7 +29,6 @@ import java.util.concurrent.TimeUnit
  *      classification (not for routing decisions).
  *
  * ADR-0005: if AI download was declined, rule-engine steps still run.
- * This worker never skips silently — it always logs outcome.
  *
  * Scheduling: [schedule] registers a periodic 24-hour job at midnight ±15 min.
  * WorkManager handles persisting the job across reboots.
@@ -42,8 +39,6 @@ class NightlyAgentWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        Log.i(TAG, "NightlyAgentWorker starting")
-
         val database = DaybookDatabase.getInstance(applicationContext)
         val repository = DaybookRepository(database)
         repository.refreshAll()
@@ -53,22 +48,17 @@ class NightlyAgentWorker(
         val allMeetings = repository.meetings.value
 
         // ── Step 1: Rule engine (always runs) ─────────────────────────────────
-        val suggestions = AgentEngine.computeSuggestions(allTasks, allMeetings, today)
-        Log.i(TAG, "AgentEngine: ${suggestions.size} suggestion(s)")
+        AgentEngine.computeSuggestions(allTasks, allMeetings, today)
 
         val todayBoard = com.sr2ma.daybook.domain.TodayBoard(day = today)
-        val briefing = BriefingWriter.write(todayBoard)
-        Log.i(TAG, "Briefing ready: ${briefing.take(80)}…")
+        BriefingWriter.write(todayBoard)
 
         // ── Step 2: AI features (optional, gated on model presence) ──────────
         val downloader = ModelDownloader(applicationContext)
         if (downloader.isModelPresent()) {
             runAiSteps(repository, database)
-        } else {
-            Log.d(TAG, "AI model not present — rule-engine-only run complete")
         }
 
-        Log.i(TAG, "NightlyAgentWorker finished")
         return Result.success()
     }
 
@@ -88,7 +78,6 @@ class NightlyAgentWorker(
             val vec = embeddingEngine.embed(text)
             if (vec != null) vectorStore.upsert(task.id, "task", vec)
         }
-        Log.d(TAG, "AI: re-embedded ${recentTasks.size} task(s)")
 
         // Re-embed meetings modified in the last 48 h
         val recentMeetings = repository.meetings.value.filter { it.updatedAt >= cutoff }
@@ -97,13 +86,11 @@ class NightlyAgentWorker(
             val vec = embeddingEngine.embed(text)
             if (vec != null) vectorStore.upsert(meeting.id, "meeting", vec)
         }
-        Log.d(TAG, "AI: re-embedded ${recentMeetings.size} meeting(s)")
 
         embeddingEngine.close()
     }
 
     companion object {
-        private const val TAG = "NightlyAgentWorker"
         private const val WORK_NAME = "daybook_nightly_agent"
 
         /**
@@ -129,7 +116,6 @@ class NightlyAgentWorker(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )
-            Log.d(TAG, "Nightly agent scheduled")
         }
     }
 }

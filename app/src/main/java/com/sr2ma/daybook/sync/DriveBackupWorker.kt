@@ -1,7 +1,6 @@
-package com.sr2ma.daybook.sync
+﻿package com.sr2ma.daybook.sync
 
 import android.content.Context
-import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -29,7 +28,7 @@ import java.util.concurrent.TimeUnit
  * Drive appDataFolder is a hidden, app-specific folder that:
  *  - Is invisible in the user's regular Drive UI.
  *  - Does not consume the user's Drive quota (for files < 10 MB).
- *  - Requires only the drive.appdata scope — not full Drive access.
+ *  - Requires only the drive.appdata scope â€” not full Drive access.
  *
  * Backup file naming: daybook-backup-{timestamp}-v{dbVersion}.db
  * The file is uploaded as a multipart upload with the encrypted DB binary payload.
@@ -38,7 +37,7 @@ import java.util.concurrent.TimeUnit
  * specific file, and [restoreBackup] validates it as a valid SQLCipher DB before
  * atomically replacing the local DB.
  *
- * Security: the backup is the already-encrypted SQLCipher DB — Drive stores the
+ * Security: the backup is the already-encrypted SQLCipher DB â€” Drive stores the
  * ciphertext, not plaintext.  The decryption key stays in Android Keystore.
  */
 class DriveBackupWorker(
@@ -47,22 +46,18 @@ class DriveBackupWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Log.i(TAG, "DriveBackupWorker starting")
 
         val syncPrefs = SyncPreferences(applicationContext)
         if (!syncPrefs.isSignedIn) {
-            Log.d(TAG, "No account signed in — skipping Drive backup")
             return@withContext Result.success()
         }
 
         val accessToken = syncPrefs.accessToken ?: run {
-            Log.w(TAG, "No access token — retrying later")
             return@withContext Result.retry()
         }
 
         val dbFile = applicationContext.getDatabasePath(DaybookDatabase.DATABASE_NAME)
         if (!dbFile.exists()) {
-            Log.w(TAG, "Database file not found — skipping")
             return@withContext Result.success()
         }
 
@@ -71,10 +66,8 @@ class DriveBackupWorker(
             val fileName = "daybook-backup-$timestamp-v${DaybookDatabase.DATABASE_VERSION}.db"
             uploadToDrive(dbFile, fileName, accessToken)
             syncPrefs.lastDriveBackupAt = System.currentTimeMillis()
-            Log.i(TAG, "Drive backup successful: $fileName")
             Result.success()
         } catch (e: Exception) {
-            Log.w(TAG, "Drive backup failed: ${e.message}")
             Result.retry()
         }
     }
@@ -107,7 +100,6 @@ class DriveBackupWorker(
                 ExistingWorkPolicy.REPLACE,
                 request,
             )
-            Log.d(TAG, "One-time Drive backup enqueued")
         }
 
         /**
@@ -133,12 +125,10 @@ class DriveBackupWorker(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )
-            Log.d(TAG, "Daily Drive backup scheduled")
         }
 
         fun cancelDaily(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_DAILY)
-            Log.d(TAG, "Daily Drive backup cancelled")
         }
 
         /**
@@ -220,7 +210,6 @@ class DriveBackupWorker(
                 // Basic sanity check: a valid SQLCipher DB is at least one page (4096 bytes).
                 // A truncated or corrupt download will fail this check without needing the key.
                 if (tempFile.length() < 4096L) {
-                    Log.e(TAG, "Restore rejected: downloaded file too small (${tempFile.length()} bytes)")
                     tempFile.delete()
                     return false
                 }
@@ -240,7 +229,6 @@ class DriveBackupWorker(
                 backup.delete()
                 true
             } catch (e: Exception) {
-                Log.e(TAG, "Restore failed: ${e.message}")
                 tempFile.delete()
                 false
             }

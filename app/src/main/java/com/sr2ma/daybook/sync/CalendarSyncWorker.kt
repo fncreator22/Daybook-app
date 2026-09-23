@@ -1,7 +1,6 @@
 ﻿package com.sr2ma.daybook.sync
 
 import android.content.Context
-import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -47,17 +46,14 @@ class CalendarSyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Log.i(TAG, "CalendarSyncWorker starting")
 
         val syncPrefs = SyncPreferences(applicationContext)
 
         if (!syncPrefs.isSignedIn) {
-            Log.d(TAG, "No account signed in — skipping")
             return@withContext Result.success()
         }
 
         val accessToken = syncPrefs.accessToken ?: run {
-            Log.w(TAG, "No access token available")
             return@withContext Result.retry()
         }
 
@@ -70,17 +66,14 @@ class CalendarSyncWorker(
         // ── Meetings ──────────────────────────────────────────────────────────
         if (syncPrefs.calendarSyncMeetings) {
             val pending = meetingDao.pendingSync()
-            Log.d(TAG, "Meetings pending sync: ${pending.size}")
             for (meeting in pending) {
                 val result = syncMeeting(meeting, accessToken)
                 when (result) {
                     is SyncResult.Success -> {
                         meetingDao.updateSyncStatus(meeting.id, SyncStatus.SYNCED, result.eventId)
-                        Log.d(TAG, "Meeting ${meeting.id} synced -> ${result.eventId}")
                     }
                     is SyncResult.Error -> {
                         meetingDao.updateSyncStatus(meeting.id, SyncStatus.SYNC_ERROR, meeting.gcalEventId)
-                        Log.w(TAG, "Meeting ${meeting.id} sync failed: ${result.message}")
                         hadError = true
                     }
                 }
@@ -90,17 +83,14 @@ class CalendarSyncWorker(
         // ── Tasks ─────────────────────────────────────────────────────────────
         if (syncPrefs.calendarSyncTasks) {
             val pending = taskDao.pendingCalendarSync()
-            Log.d(TAG, "Tasks pending calendar sync: ${pending.size}")
             for (task in pending) {
                 val result = syncTask(task, accessToken)
                 when (result) {
                     is SyncResult.Success -> {
                         taskDao.updateSyncStatus(task.id, SyncStatus.SYNCED, result.eventId)
-                        Log.d(TAG, "Task ${task.id} synced -> ${result.eventId}")
                     }
                     is SyncResult.Error -> {
                         taskDao.updateSyncStatus(task.id, SyncStatus.SYNC_ERROR, task.gcalEventId)
-                        Log.w(TAG, "Task ${task.id} sync failed: ${result.message}")
                         hadError = true
                     }
                 }
@@ -110,10 +100,8 @@ class CalendarSyncWorker(
         syncPrefs.lastCalendarSyncAt = System.currentTimeMillis()
 
         if (hadError) {
-            Log.w(TAG, "CalendarSyncWorker finished with errors — will retry")
             Result.retry()
         } else {
-            Log.i(TAG, "CalendarSyncWorker finished successfully")
             Result.success()
         }
     }
@@ -274,7 +262,6 @@ class CalendarSyncWorker(
                 ExistingWorkPolicy.KEEP,
                 request,
             )
-            Log.d(TAG, "Calendar sync enqueued")
         }
     }
 }

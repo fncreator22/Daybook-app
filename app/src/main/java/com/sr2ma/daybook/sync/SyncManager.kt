@@ -1,7 +1,6 @@
 ﻿package com.sr2ma.daybook.sync
 
 import android.content.Context
-import android.util.Log
 import com.sr2ma.daybook.data.DaybookDatabase
 import com.sr2ma.daybook.data.dao.MeetingDao
 import com.sr2ma.daybook.data.dao.TaskDao
@@ -92,7 +91,6 @@ class SyncManager(
         try {
             DriveBackupWorker.listBackups(token)
         } catch (e: Exception) {
-            Log.w(TAG, "listDriveBackups failed: ${e.message}")
             emptyList()
         }
     }
@@ -107,7 +105,6 @@ class SyncManager(
         val tempFile = try {
             DriveBackupWorker.downloadBackup(fileId, token, destDir)
         } catch (e: Exception) {
-            Log.w(TAG, "Download failed: ${e.message}")
             null
         } ?: return@withContext false
 
@@ -124,7 +121,6 @@ class SyncManager(
         all.filter { it.syncStatus == SyncStatus.LOCAL_ONLY }.forEach { meeting ->
             meetingDao.updateSyncStatus(meeting.id, SyncStatus.PENDING_SYNC, meeting.gcalEventId)
         }
-        Log.d(TAG, "Marked ${all.size} meetings as PENDING_SYNC")
     }
 
     companion object {
