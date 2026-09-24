@@ -11,6 +11,7 @@ import com.sr2ma.daybook.data.DaybookDatabase
 import com.sr2ma.daybook.data.DaybookRepository
 import com.sr2ma.daybook.domain.AgentEngine
 import com.sr2ma.daybook.domain.BriefingWriter
+import com.sr2ma.daybook.domain.KnowledgeGraphEngine
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
@@ -52,6 +53,15 @@ class NightlyAgentWorker(
 
         val todayBoard = com.sr2ma.daybook.domain.TodayBoard(day = today)
         BriefingWriter.write(todayBoard)
+
+        // ── Step 1b: OKF Knowledge Graph — dot-to-dot reasoning ───────────────
+        // Deterministic, zero-AI. Builds/updates nodes+edges in kg_nodes/kg_edges.
+        val allLogs = repository.logEntries.value
+        KnowledgeGraphEngine.populateFromBoard(database, allTasks, allMeetings, allLogs)
+        // Prune stale edges once a week (Sunday)
+        if (today.dayOfWeek.value == 7) {
+            KnowledgeGraphEngine.pruneStaleEdges(database)
+        }
 
         // ── Step 2: AI features (optional, gated on model presence) ──────────
         val downloader = ModelDownloader(applicationContext)

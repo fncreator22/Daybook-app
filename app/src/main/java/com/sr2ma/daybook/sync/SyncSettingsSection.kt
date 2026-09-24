@@ -1,5 +1,6 @@
 package com.sr2ma.daybook.sync
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -7,16 +8,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +42,7 @@ import java.util.Locale
  * Kept in the sync package so that DaybookApp does not need to know about the
  * SyncViewModel internals; it is inserted into SettingsScreen as a composable.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SyncSettingsSection(
     syncViewModel: SyncViewModel,
@@ -52,45 +60,52 @@ fun SyncSettingsSection(
         )
 
         // ── Google account row ────────────────────────────────────────────────
-        DaybookCard {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-                Text(
-                    text = "Google account",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                if (!googleAuthConfigured) {
+        var showGoogleSheet by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+        DaybookCard(onClick = { showGoogleSheet = true }) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Google sync requires setup — see AGENTS.md for OAuth steps",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "Google account",
+                        style = MaterialTheme.typography.bodyLarge,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = {}, enabled = false) {
-                        Text("Sign in with Google")
-                    }
-                } else if (state.isSignedIn) {
                     Text(
-                        text = state.accountEmail ?: "",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = if (state.isSignedIn && state.accountEmail != null)
+                            state.accountEmail!!
+                        else if (!googleAuthConfigured)
+                            "Setup required (see Settings)"
+                        else
+                            "Not signed in — tap to connect",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = syncViewModel::signOut, enabled = !state.busy) {
-                        Text("Sign out", color = MaterialTheme.colorScheme.error)
-                    }
-                } else {
-                    Text(
-                        text = "Not signed in",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = syncViewModel::signIn, enabled = !state.busy) {
-                        Text("Sign in with Google")
-                    }
                 }
+            }
+        }
+
+        if (showGoogleSheet) {
+            val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { showGoogleSheet = false },
+                sheetState = sheetState,
+            ) {
+                GoogleSignInSheet(
+                    isSignedIn = state.isSignedIn,
+                    accountEmail = state.accountEmail,
+                    googleAuthConfigured = googleAuthConfigured,
+                    busy = state.busy,
+                    onSignIn = { syncViewModel.signIn(); showGoogleSheet = false },
+                    onSignOut = { syncViewModel.signOut(); showGoogleSheet = false },
+                )
             }
         }
 
@@ -325,3 +340,70 @@ private fun RestorePickerDialog(
 
 private fun formatTimestamp(ts: Long): String =
     SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(ts))
+
+// ── Google Sign-In Bottom Sheet ───────────────────────────────────────────────
+
+/**
+ * ModalBottomSheet content for Google account management.
+ * Auth is fully optional — sync features are gated on isSignedIn.
+ * The app works completely offline without signing in.
+ */
+@Composable
+fun GoogleSignInSheet(
+    isSignedIn: Boolean,
+    accountEmail: String?,
+    googleAuthConfigured: Boolean,
+    busy: Boolean,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Google account",
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Text(
+            text = "Used only for Calendar sync and Drive backup. Nothing else is uploaded.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        HorizontalDivider()
+        if (!googleAuthConfigured) {
+            Text(
+                text = "OAuth client ID not yet configured. See AGENTS.md — Phase 4 wizard.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        } else if (isSignedIn && accountEmail != null) {
+            Text(
+                text = "Signed in as $accountEmail",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            TextButton(
+                onClick = onSignOut,
+                enabled = !busy,
+            ) {
+                Text(
+                    text = "Sign out",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        } else {
+            TextButton(
+                onClick = onSignIn,
+                enabled = googleAuthConfigured && !busy,
+            ) {
+                Text("Continue with Google")
+            }
+        }
+    }
+}
+

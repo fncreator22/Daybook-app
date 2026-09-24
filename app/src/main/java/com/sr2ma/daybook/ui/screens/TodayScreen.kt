@@ -1,27 +1,42 @@
 package com.sr2ma.daybook.ui.screens
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.model.LogEntry
+import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.WhatsAppMessage
 import com.sr2ma.daybook.ui.DaybookUiState
 import com.sr2ma.daybook.ui.DaybookViewModel
@@ -48,6 +64,7 @@ import com.sr2ma.daybook.ui.components.TaskRow
 import com.sr2ma.daybook.ui.theme.DaybookAccents
 import com.sr2ma.daybook.whatsapp.WhatsAppReplyHelper
 import java.time.LocalDate
+import kotlinx.coroutines.delay
 
 /**
  * The landing screen: one scrollable day, bucketed by what it is asking of you.
@@ -76,6 +93,18 @@ fun TodayScreen(
         }
         item(key = "quick-add") {
             QuickAddField(onAdd = viewModel::quickAddTask)
+        }
+
+        // Active passes widget: horizontal chip row, View More + Add buttons
+        if (state.passes.isNotEmpty()) {
+            item(key = "active-passes") {
+                ActivePassesWidget(
+                    passes = state.passes,
+                    today = state.today,
+                    onViewMore = viewModel::openWalletTab,
+                    onAdd = viewModel::openWalletAdd,
+                )
+            }
         }
 
         if (board.isEmpty) {
@@ -360,4 +389,105 @@ private fun QuickAddField(
         },
         modifier = modifier.fillMaxWidth(),
     )
+}
+
+// ── Active Passes Widget ───────────────────────────────────────────────────────
+
+/**
+ * Shows up to 3 active (non-expired) passes as horizontal chips on the Today dashboard.
+ * Two action buttons: "View more" → Wallet tab, "+" → add a new pass.
+ */
+@Composable
+fun ActivePassesWidget(
+    passes: List<Pass>,
+    today: LocalDate,
+    onViewMore: () -> Unit,
+    onAdd: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val activePasses = remember(passes, today) {
+        passes
+            .filter { it.expiryDate == null || !it.expiryDate.isBefore(today) }
+            .take(3)
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.dashboard_passes_title),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onViewMore) {
+                    Text(stringResource(R.string.dashboard_passes_view_more))
+                }
+                FilledTonalIconButton(
+                    onClick = onAdd,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_add),
+                        contentDescription = stringResource(R.string.cd_add_pass),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+
+        if (activePasses.isEmpty()) {
+            Text(
+                text = stringResource(R.string.dashboard_passes_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        } else {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp),
+            ) {
+                itemsIndexed(activePasses, key = { _, p -> p.id }) { index, pass ->
+                    var visible by remember(pass.id) { mutableStateOf(false) }
+                    LaunchedEffect(pass.id) {
+                        delay(index * 60L)
+                        visible = true
+                    }
+                    AnimatedVisibility(
+                        visible = visible,
+                        enter = slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium,
+                            ),
+                            initialOffsetY = { it / 2 },
+                        ) + fadeIn(),
+                    ) {
+                        SuggestionChip(
+                            onClick = onViewMore,
+                            label = {
+                                Text(
+                                    text = pass.title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                )
+                            },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(categoryIcon(pass.category)),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SuggestionChipDefaults.IconSize),
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+    }
 }

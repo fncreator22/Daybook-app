@@ -1,5 +1,13 @@
 package com.sr2ma.daybook.ui.screens
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,25 +19,48 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.PassCategory
 import com.sr2ma.daybook.ui.DaybookUiState
 import com.sr2ma.daybook.ui.DaybookViewModel
+import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 /**
- * The Wallet tab: lists all stored passes and shows the scanner when requested.
+ * Wallet tab: lists all stored passes with Google Wallet-style card rows.
+ * No emojis — all category indicators use Material-style vector icons.
+ *
+ * Animation: each PassRow slides+fades in with a staggered spring delay,
+ * giving the impression of a polished, senior-built list.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(
     state: DaybookUiState,
@@ -45,29 +76,172 @@ fun WalletScreen(
     }
 
     if (state.passes.isEmpty()) {
-        WalletEmptyState(modifier = modifier)
+        WalletEmptyState(
+            onScan = { viewModel.openWalletScanner() },
+            onManual = { viewModel.newPassManual() },
+            modifier = modifier,
+        )
     } else {
         LazyColumn(
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(state.passes, key = { it.id }) { pass ->
-                PassRow(pass = pass, onClick = { viewModel.editPass(pass) })
+            itemsIndexed(state.passes, key = { _, pass -> pass.id }) { index, pass ->
+                var visible by remember { mutableStateOf(false) }
+                LaunchedEffect(pass.id) {
+                    delay(index * 50L)  // staggered spring entrance
+                    visible = true
+                }
+                AnimatedVisibility(
+                    visible = visible,
+                    enter = slideInVertically(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium,
+                        ),
+                        initialOffsetY = { it / 3 },
+                    ) + fadeIn(spring(stiffness = Spring.StiffnessMedium)),
+                ) {
+                    PassRow(
+                        pass = pass,
+                        onClick = { viewModel.editPass(pass) },
+                    )
+                }
             }
         }
     }
 }
 
+// ── Pass row (Google Wallet style) ────────────────────────────────────────────
+
 @Composable
-private fun WalletEmptyState(modifier: Modifier = Modifier) {
+private fun PassRow(pass: Pass, onClick: () -> Unit) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            // Circle icon background — matches Google Wallet style
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(categoryIcon(pass.category)),
+                        contentDescription = categoryLabel(pass.category),
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = pass.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(1.dp))
+                // Category label
+                Text(
+                    text = categoryLabel(pass.category),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Expiry row
+                if (pass.expiryDate != null) {
+                    val today = LocalDate.now()
+                    val expired = pass.expiryDate.isBefore(today)
+                    val expiryText = buildString {
+                        if (expired) append(stringResource(R.string.pass_expired_label))
+                        else append(stringResource(R.string.pass_expires,
+                            "${pass.expiryDate.dayOfMonth} " +
+                            pass.expiryDate.month.name.lowercase().replaceFirstChar { it.uppercase() } +
+                            " ${pass.expiryDate.year}"))
+                    }
+                    Text(
+                        text = expiryText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (expired) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                // Barcode preview + balance in one row
+                val barcodeLine = pass.barcodeValue.take(16) +
+                    if (pass.barcodeValue.length > 16) "\u2026" else ""
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    Text(
+                        text = barcodeLine,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    )
+                    if (pass.balance != null) {
+                        Text(
+                            text = "\u00b7 ${pass.balance}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+
+            // Chevron
+            Icon(
+                painter = painterResource(R.drawable.ic_close),  // reuse rotate-able arrow
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+// ── Empty state — "Add to Wallet" style selector ─────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WalletEmptyState(
+    onScan: () -> Unit,
+    onManual: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showAddSheet by remember { mutableStateOf(false) }
+
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 32.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_wallet),
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = stringResource(R.string.wallet_empty_title),
                 style = MaterialTheme.typography.titleMedium,
             )
-            Spacer(Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.wallet_empty_body),
                 style = MaterialTheme.typography.bodyMedium,
@@ -75,111 +249,138 @@ private fun WalletEmptyState(modifier: Modifier = Modifier) {
             )
         }
     }
-}
 
-@Composable
-private fun PassRow(pass: Pass, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top,
+    if (showAddSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showAddSheet = false },
+            sheetState = sheetState,
         ) {
-            // Category emoji icon
-            Text(
-                text = categoryEmoji(pass.category),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                // Title
-                Text(
-                    text = pass.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                // Category label
-                Text(
-                    text = categoryLabel(pass.category),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                // Barcode preview
-                val barcodePreview = pass.barcodeValue.take(20) +
-                    if (pass.barcodeValue.length > 20) "\u2026" else ""
-                Text(
-                    text = stringResource(R.string.pass_barcode_preview, barcodePreview),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                // Expiry date if present
-                if (pass.expiryDate != null) {
-                    val expiryLabel = "${pass.expiryDate.dayOfMonth} " +
-                        pass.expiryDate.month.name.lowercase()
-                            .replaceFirstChar { it.uppercase() } +
-                        " ${pass.expiryDate.year}"
-                    Text(
-                        text = stringResource(R.string.pass_expires, expiryLabel),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (pass.expiryDate.isBefore(java.time.LocalDate.now()))
-                            MaterialTheme.colorScheme.error
-                        else
-                            MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                } else if (pass.ocrText.isNotBlank()) {
-                    // OCR text snippet when no expiry set
-                    val snippet = pass.ocrText.replace('\n', ' ').take(50) +
-                        if (pass.ocrText.length > 50) "\u2026" else ""
-                    Text(
-                        text = snippet,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                // Balance if present
-                if (pass.balance != null) {
-                    Text(
-                        text = pass.balance,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-            }
+            WalletAddSheet(onScan = { showAddSheet = false; onScan() }, onManual = { showAddSheet = false; onManual() })
         }
     }
 }
 
-@Composable
-private fun categoryLabel(category: PassCategory): String = stringResource(
-    when (category) {
-        PassCategory.LOYALTY_CARD  -> R.string.pass_cat_loyalty_card
-        PassCategory.EVENT_TICKET  -> R.string.pass_cat_event_ticket
-        PassCategory.TRANSPORT     -> R.string.pass_cat_transport
-        PassCategory.GIFT_CARD     -> R.string.pass_cat_gift_card
-        PassCategory.ID            -> R.string.pass_cat_id
-        PassCategory.HEALTH        -> R.string.pass_cat_health
-        PassCategory.OTHER         -> R.string.pass_cat_other
-    },
-)
+// ── Add to Wallet bottom sheet — matches Google Wallet "Add to Wallet" UI ────
 
-private fun categoryEmoji(category: PassCategory): String = when (category) {
-    PassCategory.LOYALTY_CARD  -> "\uD83C\uDFAB"  // 🎫
-    PassCategory.EVENT_TICKET  -> "\uD83C\uDF9F"  // 🎟
-    PassCategory.TRANSPORT     -> "\uD83D\uDE82"  // 🚂
-    PassCategory.GIFT_CARD     -> "\uD83C\uDF81"  // 🎁
-    PassCategory.ID            -> "\uD83D\uDCB3"  // 💳
-    PassCategory.HEALTH        -> "\u2695\uFE0F"  // ⚕️
-    PassCategory.OTHER         -> "\uD83D\uDDC2"  // 🗂
+@Composable
+fun WalletAddSheet(onScan: () -> Unit, onManual: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 32.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.wallet_add_title),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_pass_loyalty,
+            titleRes = R.string.pass_cat_loyalty_card,
+            subtitleRes = R.string.wallet_add_loyalty_desc,
+            onClick = onManual,
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_pass_gift,
+            titleRes = R.string.pass_cat_gift_card,
+            subtitleRes = R.string.wallet_add_gift_desc,
+            onClick = onManual,
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_pass_transport,
+            titleRes = R.string.pass_cat_transport,
+            subtitleRes = R.string.wallet_add_transport_desc,
+            onClick = onManual,
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_pass_id,
+            titleRes = R.string.pass_cat_id,
+            subtitleRes = R.string.wallet_add_id_desc,
+            onClick = onManual,
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_pass_health,
+            titleRes = R.string.pass_cat_health,
+            subtitleRes = R.string.wallet_add_health_desc,
+            onClick = onManual,
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_pass_other,
+            titleRes = R.string.pass_cat_other,
+            subtitleRes = R.string.wallet_add_other_desc,
+            onClick = onScan,
+        )
+    }
 }
 
+@Composable
+private fun WalletAddRow(
+    @DrawableRes iconRes: Int,
+    @StringRes titleRes: Int,
+    @StringRes subtitleRes: Int,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Surface(
+            modifier = Modifier.size(44.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(titleRes),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(subtitleRes),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+            )
+        }
+    }
+}
+
+// ── Category helpers — NO emojis, pure icon references ───────────────────────
+
+@DrawableRes
+fun categoryIcon(category: PassCategory): Int = when (category) {
+    PassCategory.LOYALTY_CARD -> R.drawable.ic_pass_loyalty
+    PassCategory.EVENT_TICKET -> R.drawable.ic_pass_ticket
+    PassCategory.TRANSPORT    -> R.drawable.ic_pass_transport
+    PassCategory.GIFT_CARD    -> R.drawable.ic_pass_gift
+    PassCategory.ID           -> R.drawable.ic_pass_id
+    PassCategory.HEALTH       -> R.drawable.ic_pass_health
+    PassCategory.OTHER        -> R.drawable.ic_pass_other
+}
+
+@Composable
+fun categoryLabel(category: PassCategory): String = stringResource(
+    when (category) {
+        PassCategory.LOYALTY_CARD -> R.string.pass_cat_loyalty_card
+        PassCategory.EVENT_TICKET -> R.string.pass_cat_event_ticket
+        PassCategory.TRANSPORT    -> R.string.pass_cat_transport
+        PassCategory.GIFT_CARD    -> R.string.pass_cat_gift_card
+        PassCategory.ID           -> R.string.pass_cat_id
+        PassCategory.HEALTH       -> R.string.pass_cat_health
+        PassCategory.OTHER        -> R.string.pass_cat_other
+    },
+)

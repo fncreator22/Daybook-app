@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.ai
+package com.sr2ma.daybook.ai
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException
@@ -89,6 +89,7 @@ class LlmEngine(
             val clazz = Class.forName("com.google.ai.edge.litertlm.LlmInference")
             val optionsClass = clazz.classes.firstOrNull { it.simpleName == "Options" }
             if (optionsClass == null) {
+                return null
             }
             // LlmInference.Options.builder().setModelPath(...).setMaxTokens(...).build()
             val builder = optionsClass.getMethod("builder").invoke(null)

@@ -415,12 +415,13 @@ private fun AddButton(tab: DaybookTab, viewModel: DaybookViewModel) {
 }
 
 /**
- * Small FAB for the Wallet tab. Tapping it shows a dialog offering
- * "Scan barcode", "Add manually", or "Upload image from gallery".
+ * FAB for the Wallet tab. Tapping it opens a Google Wallet-style bottom sheet
+ * so the user can choose what kind of pass to add.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WalletAddMenu(viewModel: DaybookViewModel) {
-    var showDialog by remember { mutableStateOf(false) }
+    var showSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -429,40 +430,24 @@ private fun WalletAddMenu(viewModel: DaybookViewModel) {
         if (uri != null) viewModel.onGalleryImageSelected(context.applicationContext, uri)
     }
 
-    androidx.compose.material3.SmallFloatingActionButton(onClick = { showDialog = true }) {
+    androidx.compose.material3.SmallFloatingActionButton(onClick = { showSheet = true }) {
         Icon(
             painter = painterResource(R.drawable.ic_add),
             contentDescription = stringResource(R.string.cd_add_pass),
         )
     }
 
-    if (showDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text(stringResource(R.string.cd_add_pass)) },
-            text = {
-                Column {
-                    TextButton(onClick = {
-                        showDialog = false
-                        viewModel.openWalletScanner()
-                    }) { Text(stringResource(R.string.wallet_add_scan)) }
-                    TextButton(onClick = {
-                        showDialog = false
-                        viewModel.newPassManual()
-                    }) { Text(stringResource(R.string.wallet_add_manual)) }
-                    TextButton(onClick = {
-                        showDialog = false
-                        galleryLauncher.launch("image/*")
-                    }) { Text(stringResource(R.string.wallet_add_upload)) }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
+    if (showSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = sheetState,
+        ) {
+            com.sr2ma.daybook.ui.screens.WalletAddSheet(
+                onScan = { showSheet = false; viewModel.openWalletScanner() },
+                onManual = { showSheet = false; viewModel.newPassManual() },
+            )
+        }
     }
 }
 

@@ -275,6 +275,32 @@
     <string name="google_server_client_id" translatable="false">YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com</string>
     <bool name="google_auth_placeholder">true</bool>
 
+    <!-- Wallet: Add to Wallet bottom sheet (Session 9) -->
+    <string name="wallet_add_title">Add to Wallet</string>
+    <string name="wallet_add_loyalty_desc">Earn and use your rewards and points</string>
+    <string name="wallet_add_gift_desc">Shop and pay with a gift card</string>
+    <string name="wallet_add_transport_desc">Get around town with your phone</string>
+    <string name="wallet_add_id_desc">Verify that it\'s you with your phone</string>
+    <string name="wallet_add_health_desc">Book appointments and get healthcare access</string>
+    <string name="wallet_add_other_desc">Take a photo of any pass, ticket, or membership card</string>
+
+    <!-- Wallet: pass row states -->
+    <string name="pass_expired_label">Expired</string>
+
+    <!-- Dashboard: active passes widget -->
+    <string name="dashboard_passes_title">Passes</string>
+    <string name="dashboard_passes_view_more">View more</string>
+    <string name="dashboard_passes_empty">No active passes</string>
+
+    <!-- Google Sign-In sheet -->
+    <string name="auth_sheet_title">Google account</string>
+    <string name="auth_sign_in">Continue with Google</string>
+    <string name="auth_sign_out">Sign out</string>
+    <string name="auth_privacy_note">Used only for Calendar sync and Drive backup. Nothing else is uploaded.</string>
+    <string name="auth_signed_in_as">Signed in as %1$s</string>
+    <string name="auth_error_generic">Sign-in failed. Try again.</string>
+
 </resources>
+
 
 

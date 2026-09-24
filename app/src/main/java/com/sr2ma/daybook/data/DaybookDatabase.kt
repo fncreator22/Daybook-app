@@ -1,4 +1,4 @@
-package com.sr2ma.daybook.data
+﻿package com.sr2ma.daybook.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -17,11 +17,11 @@ import android.database.sqlite.SQLiteOpenHelper
  * by string concatenation with user input.
  *
  * Migration history:
- *   v1 â†’ v2: tasks â€” cadence, cadence_parent_id, cadence_last_generated
- *   v2 â†’ v3: meetings â€” ai_summary, ai_summary_at
- *   v3 â†’ v4: meetings â€” calendar_event_id
- *   v4 â†’ v5: passes table (barcode wallet)
- *   v5 â†’ v6: meetings + tasks â€” gcal_event_id, sync_status, tasks.calendar_sync_enabled
+ *   v1 Ã¢â€ â€™ v2: tasks Ã¢â‚¬â€ cadence, cadence_parent_id, cadence_last_generated
+ *   v2 Ã¢â€ â€™ v3: meetings Ã¢â‚¬â€ ai_summary, ai_summary_at
+ *   v3 Ã¢â€ â€™ v4: meetings Ã¢â‚¬â€ calendar_event_id
+ *   v4 Ã¢â€ â€™ v5: passes table (barcode wallet)
+ *   v5 Ã¢â€ â€™ v6: meetings + tasks Ã¢â‚¬â€ gcal_event_id, sync_status, tasks.calendar_sync_enabled
  */
 class DaybookDatabase(context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -36,7 +36,7 @@ class DaybookDatabase(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Never drop a table â€” this is the user's only copy of the data.
+        // Never drop a table Ã¢â‚¬â€ this is the user's only copy of the data.
         if (oldVersion < 2) MIGRATIONS_V2.forEach(db::execSQL)
         if (oldVersion < 3) MIGRATIONS_V3.forEach(db::execSQL)
         if (oldVersion < 4) MIGRATIONS_V4.forEach(db::execSQL)
@@ -47,7 +47,7 @@ class DaybookDatabase(context: Context) :
 
     companion object {
         const val DATABASE_NAME = "daybook.db"
-        const val DATABASE_VERSION = 7
+        const val DATABASE_VERSION = 8
 
         const val TABLE_MEETINGS = "meetings"
         const val TABLE_TASKS = "tasks"
@@ -138,9 +138,9 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX idx_passes_category ON passes(category)",
         )
 
-        // â”€â”€ Incremental migrations (applied in onUpgrade) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Incremental migrations (applied in onUpgrade) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
-        /** v1 â†’ v2: recurring task support */
+        /** v1 Ã¢â€ â€™ v2: recurring task support */
         val MIGRATIONS_V2: List<String> = listOf(
             "ALTER TABLE tasks ADD COLUMN cadence TEXT NOT NULL DEFAULT 'NONE'",
             "ALTER TABLE tasks ADD COLUMN cadence_parent_id INTEGER",
@@ -148,18 +148,18 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX idx_tasks_cadence ON tasks(cadence)",
         )
 
-        /** v2 â†’ v3: AI meeting summaries */
+        /** v2 Ã¢â€ â€™ v3: AI meeting summaries */
         val MIGRATIONS_V3: List<String> = listOf(
             "ALTER TABLE meetings ADD COLUMN ai_summary TEXT",
             "ALTER TABLE meetings ADD COLUMN ai_summary_at INTEGER",
         )
 
-        /** v3 â†’ v4: calendar integration */
+        /** v3 Ã¢â€ â€™ v4: calendar integration */
         val MIGRATIONS_V4: List<String> = listOf(
             "ALTER TABLE meetings ADD COLUMN calendar_event_id TEXT",
         )
 
-        /** v4 â†’ v5: barcode wallet (ADR-0002 â€” passes have barcodes) */
+        /** v4 Ã¢â€ â€™ v5: barcode wallet (ADR-0002 Ã¢â‚¬â€ passes have barcodes) */
         val MIGRATIONS_V5: List<String> = listOf(
             """
             CREATE TABLE passes (
@@ -180,7 +180,7 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX idx_passes_category ON passes(category)",
         )
 
-        /** v5 â†’ v6: Google Calendar sync columns on meetings and tasks */
+        /** v5 Ã¢â€ â€™ v6: Google Calendar sync columns on meetings and tasks */
         val MIGRATIONS_V6: List<String> = listOf(
             "ALTER TABLE meetings ADD COLUMN gcal_event_id TEXT",
             "ALTER TABLE meetings ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'LOCAL_ONLY'",
@@ -189,7 +189,7 @@ class DaybookDatabase(context: Context) :
             "ALTER TABLE tasks ADD COLUMN calendar_sync_enabled INTEGER NOT NULL DEFAULT 0",
         )
 
-        /** v6 â†’ v7: WhatsApp notification log (Phase 7, opt-in) */
+        /** v6 Ã¢â€ â€™ v7: WhatsApp notification log (Phase 7, opt-in) */
         val MIGRATIONS_V7: List<String> = listOf(
             """
             CREATE TABLE whatsapp_messages (
@@ -207,6 +207,30 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX idx_whatsapp_received ON whatsapp_messages(received_at)",
         )
 
+
+        /** v7 → v8: OKF knowledge graph — node and edge tables for dot-to-dot reasoning */
+        val MIGRATIONS_V8: List<String> = listOf(
+            """
+            CREATE TABLE IF NOT EXISTS kg_nodes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_text TEXT    NOT NULL,
+                source_id   INTEGER NOT NULL,
+                source_type TEXT    NOT NULL,
+                last_seen   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            )
+            """.trimIndent(),
+            """
+            CREATE TABLE IF NOT EXISTS kg_edges (
+                from_node INTEGER NOT NULL REFERENCES kg_nodes(id) ON DELETE CASCADE,
+                to_node   INTEGER NOT NULL REFERENCES kg_nodes(id) ON DELETE CASCADE,
+                relation  TEXT    NOT NULL,
+                weight    REAL    NOT NULL DEFAULT 1.0,
+                PRIMARY KEY (from_node, to_node, relation)
+            )
+            """.trimIndent(),
+            "CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges(from_node)",
+            "CREATE INDEX IF NOT EXISTS idx_kg_edges_to   ON kg_edges(to_node)",
+        )
         @Volatile private var instance: DaybookDatabase? = null
 
         /**

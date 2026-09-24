@@ -192,6 +192,12 @@ class DaybookViewModel(
         it.copy(editor = Editor.PassSheet(Pass(title = "", barcodeValue = "", barcodeFormat = "")))
     }
 
+    /** Navigate to the Wallet tab from the Today dashboard "View more" button. */
+    fun openWalletTab() = update { it.copy(tab = DaybookTab.WALLET) }
+
+    /** Navigate to Wallet tab and open the add-pass scanner from the Today dashboard "+" button. */
+    fun openWalletAdd() = update { it.copy(tab = DaybookTab.WALLET, walletScanOpen = true) }
+
     fun savePass(pass: Pass) {
         if (pass.title.isBlank()) return
         write(onSuccess = { it.copy(editor = null) }) { repository.savePass(pass) }
