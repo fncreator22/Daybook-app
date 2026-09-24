@@ -155,6 +155,15 @@ data class DaybookUiState(
      * Null = no NLP result yet in this session.
      */
     val lastConversationParseResult: com.sr2ma.daybook.domain.ParseResult? = null,
+
+    /**
+     * True when the Gemma 270M model file exists and passes the fast-path size
+     * check ([ModelDownloader.isModelPresent]). Updated on [openConversation].
+     *
+     * When false, an UNKNOWN intent shows an inline "Download AI model in Settings"
+     * message rather than attempting inference (which would return [InferResult.ModelNotReady]).
+     */
+    val llmModelReady: Boolean = false,
 ) {
     val taskCount: Int get() = tasks.size
     val logCount: Int get() = logEntries.size

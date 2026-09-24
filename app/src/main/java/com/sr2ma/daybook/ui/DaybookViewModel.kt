@@ -26,6 +26,9 @@ import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.ScanResult
+import com.sr2ma.daybook.ai.LlmEngine
+import com.sr2ma.daybook.ai.ModelDownloader
+import com.sr2ma.daybook.domain.ConversationLlmRouter
 import com.sr2ma.daybook.data.dao.WhatsAppDao
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +56,10 @@ import java.time.LocalDate
 class DaybookViewModel(
     private val repository: DaybookRepository,
     private val codec: BackupCodec = BackupCodec(),
+    /** Null = AI model not yet downloaded; UNKNOWN intents show "download" prompt. */
+    private val llmEngine: LlmEngine? = null,
+    /** Used for fast model-present check on [openConversation]. */
+    private val modelDownloader: ModelDownloader? = null,
 ) : ViewModel() {
 
     private val whatsAppDao = WhatsAppDao(repository.database)
@@ -357,8 +364,17 @@ class DaybookViewModel(
 
     // ── Agent conversation ────────────────────────────────────────────────────
 
-    /** Opens the ConversationSheet. */
-    fun openConversation() = update { it.copy(conversationOpen = true) }
+    /**
+     * Opens the ConversationSheet and snaps whether the Gemma model is present.
+     *
+     * The model-present check is a fast [File.exists] call (no I/O).
+     * [llmModelReady] drives whether UNKNOWN intents attempt inference or
+     * show the "Download AI model in Settings" inline message.
+     */
+    fun openConversation() {
+        val modelReady = modelDownloader?.isModelPresent() ?: false
+        update { it.copy(conversationOpen = true, llmModelReady = modelReady) }
+    }
 
     /**
      * Closes the ConversationSheet and runs the memory extraction pass.
@@ -453,8 +469,103 @@ class DaybookViewModel(
                         listOf("Save", "Dismiss")
                 }
                 ParsedIntent.UNKNOWN -> {
-                    "I'm not sure what to do with that. Did you mean to add a task, " +
-                        "note, or meeting?" to
+                    // ── Stage 4: attempt LLM classification ──────────────────
+                    val engine  = llmEngine
+                    val modelOk = _state.value.llmModelReady
+
+                    if (engine != null && modelOk) {
+                        // LLM path — runs on IO (engine is thread-safe via Mutex).
+                        val routeResult = withContext(Dispatchers.IO) {
+                            ConversationLlmRouter.route(
+                                userText  = safText,
+                                today     = today,
+                                llmEngine = engine,
+                                db        = repository.database,
+                            )
+                        }
+                        when (routeResult) {
+                            is ConversationLlmRouter.RouteResult.Classified -> {
+                                // LLM succeeded — re-run the Stage 3 render path
+                                // with the LLM-produced ParseResult.
+                                val llmParsed = routeResult.result
+                                val (llmText, llmChips) = when (llmParsed.intent) {
+                                    ParsedIntent.CREATE_TASK -> {
+                                        val t = llmParsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
+                                        val pl = when (llmParsed.priority) {
+                                            com.sr2ma.daybook.domain.model.Priority.URGENT -> " (urgent)"
+                                            com.sr2ma.daybook.domain.model.Priority.HIGH   -> " (high priority)"
+                                            com.sr2ma.daybook.domain.model.Priority.LOW    -> " (low priority)"
+                                            else -> ""
+                                        }
+                                        val dl = llmParsed.dueDate?.let { ", due $it" } ?: ""
+                                        "Got it — task: \"$t\"$pl$dl. Add it?" to
+                                            listOf("Add task", "Dismiss")
+                                    }
+                                    ParsedIntent.CREATE_MEETING -> {
+                                        val t = llmParsed.meetingTitle?.takeIf { it.isNotBlank() } ?: safText
+                                        val who = if (llmParsed.meetingAttendees.isNotEmpty())
+                                            " with ${llmParsed.meetingAttendees.joinToString(", ")}" else ""
+                                        val day = llmParsed.dueDate ?: today
+                                        "Meeting: \"$t\"$who on $day. Add it?" to
+                                            listOf("Add meeting", "Dismiss")
+                                    }
+                                    ParsedIntent.CREATE_LOG -> {
+                                        val b = llmParsed.logBody?.takeIf { it.isNotBlank() } ?: safText
+                                        val k = when (llmParsed.logKind) {
+                                            com.sr2ma.daybook.domain.model.LogKind.WIN      -> "win"
+                                            com.sr2ma.daybook.domain.model.LogKind.BLOCKER  -> "blocker"
+                                            com.sr2ma.daybook.domain.model.LogKind.DECISION -> "decision"
+                                            else -> "note"
+                                        }
+                                        "Logging a $k: \"${b.take(80)}\". Save it?" to
+                                            listOf("Save", "Dismiss")
+                                    }
+                                    ParsedIntent.UNKNOWN -> {
+                                        "I'm not sure what to do with that. What would you like?" to
+                                            listOf("Add as task", "Add as meeting", "Add as log", "Dismiss")
+                                    }
+                                }
+                                val llmMsg = com.sr2ma.daybook.domain.ConversationMessage(
+                                    text = llmText, isUser = false, suggestions = llmChips,
+                                )
+                                update {
+                                    it.copy(
+                                        conversationMessages = it.conversationMessages + llmMsg,
+                                        agentThinking = false,
+                                        lastConversationParseResult = llmParsed,
+                                    )
+                                }
+                                return@launch
+                            }
+                            is ConversationLlmRouter.RouteResult.Timeout -> {
+                                val msg = com.sr2ma.daybook.domain.ConversationMessage(
+                                    text = "AI took too long. Try again or add it manually.",
+                                    isUser = false,
+                                    suggestions = listOf("Add as task", "Add as meeting", "Dismiss"),
+                                )
+                                update { it.copy(conversationMessages = it.conversationMessages + msg, agentThinking = false) }
+                                return@launch
+                            }
+                            is ConversationLlmRouter.RouteResult.ModelNotReady -> {
+                                // Fall through to the no-model message below
+                            }
+                            is ConversationLlmRouter.RouteResult.ParseError,
+                            is ConversationLlmRouter.RouteResult.Failure -> {
+                                val msg = com.sr2ma.daybook.domain.ConversationMessage(
+                                    text = "I couldn't process that. Add it manually?",
+                                    isUser = false,
+                                    suggestions = listOf("Add as task", "Add as meeting", "Add as log", "Dismiss"),
+                                )
+                                update { it.copy(conversationMessages = it.conversationMessages + msg, agentThinking = false) }
+                                return@launch
+                            }
+                        }
+                    }
+
+                    // No model (or ModelNotReady fallback) — degraded response.
+                    "I'm not sure what to do with that. " +
+                        (if (!modelOk) "Download the AI model in Settings for smarter replies. " else "") +
+                        "Or pick manually:" to
                         listOf("Add as task", "Add as meeting", "Add as log", "Dismiss")
                 }
             }
@@ -855,11 +966,24 @@ class DaybookViewModel(
 
     companion object {
         /**
-         * Built from the container on the Application rather than by a DI framework:
-         * one ViewModel with one dependency does not need one.
+         * Built from the container on the Application rather than by a DI framework.
+         *
+         * [llmEngine] and [modelDownloader] are optional: when null the conversation
+         * agent runs in rule-engine-only mode (UNKNOWN intents show the "download model"
+         * inline message instead of attempting inference).
          */
-        fun factory(repository: DaybookRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { DaybookViewModel(repository) }
+        fun factory(
+            repository: DaybookRepository,
+            llmEngine: LlmEngine? = null,
+            modelDownloader: ModelDownloader? = null,
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                DaybookViewModel(
+                    repository      = repository,
+                    llmEngine       = llmEngine,
+                    modelDownloader = modelDownloader,
+                )
+            }
         }
     }
 }

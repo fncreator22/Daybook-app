@@ -49,6 +49,31 @@ class AppContainer(context: Context) {
     val syncManager: SyncManager by lazy {
         SyncManager(applicationContext, syncPreferences, googleAuthClient)
     }
+
+    // ── On-device AI (Phase 3) ─────────────────────────────────────────────────
+    // Lazy-load: the LlmEngine and ModelDownloader are created only when a
+    // conversation turn reaches an UNKNOWN intent. Never instantiated at startup.
+
+    val modelDownloader: com.sr2ma.daybook.ai.ModelDownloader by lazy {
+        com.sr2ma.daybook.ai.ModelDownloader(applicationContext)
+    }
+
+    /**
+     * Singleton [LlmEngine] for the process lifetime.
+     *
+     * AGENTS.md non-negotiables enforced inside [LlmEngine]:
+     *  - Lazy-load: not created until first [LlmEngine.infer] call.
+     *  - Idle release: engine closed after 3 min of no inference.
+     *  - Single queue: one Mutex, calls queue, never run in parallel.
+     *  - Hard timeout: 30 s [kotlinx.coroutines.withTimeout] per call.
+     */
+    val llmEngine: com.sr2ma.daybook.ai.LlmEngine by lazy {
+        com.sr2ma.daybook.ai.LlmEngine(
+            context      = applicationContext,
+            downloader   = modelDownloader,
+            versionTag   = "v1",
+        )
+    }
 }
 
 class DaybookApplication : Application() {

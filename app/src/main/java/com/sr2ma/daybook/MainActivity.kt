@@ -22,7 +22,12 @@ import com.sr2ma.daybook.ui.theme.DaybookTheme
 class MainActivity : ComponentActivity() {
 
     private val viewModel: DaybookViewModel by viewModels {
-        DaybookViewModel.factory((application as DaybookApplication).container.repository)
+        val container = (application as DaybookApplication).container
+        DaybookViewModel.factory(
+            repository      = container.repository,
+            llmEngine       = container.llmEngine,
+            modelDownloader = container.modelDownloader,
+        )
     }
 
     private val syncViewModel: SyncViewModel by viewModels {
