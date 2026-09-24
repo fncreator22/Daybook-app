@@ -144,7 +144,7 @@ class ModelDownloader(private val context: Context) {
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private fun modelFileName(versionTag: String): String =
-        "gemma-270m-it-q4-$versionTag.litertlm"
+        "gemma-270m-it-q8-$versionTag.litertlm"
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -163,20 +163,18 @@ class ModelDownloader(private val context: Context) {
         private const val MIN_FREE_BYTES = 250L * MB   // AGENTS.md hard requirement
 
         /**
-         * Published SHA-256 for Gemma 270M IT INT4 QAT from
-         * litert-community/gemma-3-270m-it on Hugging Face.
-         *
-         * IMPORTANT: Update this constant when a new model version ships.
-         * Do not load any file whose hash does not match this value.
+         * SHA-256 of gemma3-270m-it-q8.litertlm (INT8 QAT, ~290 MB).
+         * Source: litert-community/gemma-3-270m-it on Hugging Face.
+         * Computed from downloaded file. Update when model version changes.
          */
         const val GEMMA_270M_V1_SHA256 =
-            "REPLACE_WITH_ACTUAL_SHA256_FROM_HUGGINGFACE_MODEL_CARD"
+            "757e9119fa5bd667a2774fb470ac4afcd3190a21c677f8e69a5d6bc908abdd63"
 
         /**
-         * Public download URL — points to the Hugging Face LFS endpoint.
-         * Replace with the resolved LFS URL from the model card if needed.
+         * Direct download URL for the q8 LiteRT model.
+         * Requires HuggingFace account + Gemma license acceptance.
          */
         const val GEMMA_270M_V1_URL =
-            "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma-3-270m-it-q4.litertlm"
+            "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.litertlm"
     }
 }

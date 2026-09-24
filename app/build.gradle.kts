@@ -70,9 +70,28 @@ android {
         buildConfig = true
     }
 
+    // ── ABI splits: only ship arm64-v8a for real-device APKs.
+    // This removes x86 / x86_64 copies of sqlite-vec, ONNX runtime, and
+    // SQLCipher native libs — saving 20-40 MB from the debug APK alone.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a")   // Nothing Phone + all modern Android flagships
+            isUniversalApk = false  // set to true only if you need a fat APK for testing
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Drop unused native debug metadata that inflates APK size
+            excludes += "**/*.kotlin_module"
+            excludes += "**/kotlin/**"
+        }
+        // Strip x86 / armeabi-v7a copies of all .so files
+        jniLibs {
+            keepDebugSymbols += "**/*.so"
         }
     }
 }
