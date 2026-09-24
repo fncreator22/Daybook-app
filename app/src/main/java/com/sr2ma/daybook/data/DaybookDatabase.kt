@@ -45,11 +45,12 @@ class DaybookDatabase(context: Context) :
         if (oldVersion < 7) MIGRATIONS_V7.forEach(db::execSQL)
         if (oldVersion < 8) MIGRATIONS_V8.forEach(db::execSQL)
         if (oldVersion < 9) MIGRATIONS_V9.forEach(db::execSQL)
+        if (oldVersion < 10) MIGRATIONS_V10.forEach(db::execSQL)
     }
 
     companion object {
         const val DATABASE_NAME = "daybook.db"
-        const val DATABASE_VERSION = 9
+        const val DATABASE_VERSION = 10
 
         const val TABLE_MEETINGS = "meetings"
         const val TABLE_TASKS = "tasks"
@@ -58,6 +59,7 @@ class DaybookDatabase(context: Context) :
         const val TABLE_WHATSAPP = "whatsapp_messages"
         const val TABLE_CONVERSATION_SUMMARIES = "conversation_summaries"
         const val TABLE_USER_PREFERENCES = "user_preferences"
+        const val TABLE_GMAIL = "gmail_messages"
 
         /**
          * Statements are ordered so `meetings` exists before `tasks` references
@@ -193,6 +195,21 @@ class DaybookDatabase(context: Context) :
                 updated_at   INTEGER NOT NULL
             )
             """.trimIndent(),
+            """
+            CREATE TABLE gmail_messages (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id       TEXT    UNIQUE,
+                sender           TEXT    NOT NULL,
+                subject          TEXT    NOT NULL,
+                snippet          TEXT    NOT NULL,
+                received_at      INTEGER NOT NULL,
+                is_read          INTEGER NOT NULL DEFAULT 0,
+                category         TEXT    NOT NULL DEFAULT 'primary',
+                suggested_action TEXT,
+                actioned_at      INTEGER
+            )
+            """.trimIndent(),
+            "CREATE INDEX IF NOT EXISTS idx_gmail_received ON gmail_messages(received_at DESC)",
         )
 
         // Ã¢â€â‚¬Ã¢â€â‚¬ Incremental migrations (applied in onUpgrade) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -309,6 +326,25 @@ class DaybookDatabase(context: Context) :
                 updated_at   INTEGER NOT NULL
             )
             """.trimIndent(),
+        )
+
+        /** v9 → v10: on-device Gmail message cache + action suggestions */
+        val MIGRATIONS_V10: List<String> = listOf(
+            """
+            CREATE TABLE IF NOT EXISTS gmail_messages (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id       TEXT    UNIQUE,
+                sender           TEXT    NOT NULL,
+                subject          TEXT    NOT NULL,
+                snippet          TEXT    NOT NULL,
+                received_at      INTEGER NOT NULL,
+                is_read          INTEGER NOT NULL DEFAULT 0,
+                category         TEXT    NOT NULL DEFAULT 'primary',
+                suggested_action TEXT,
+                actioned_at      INTEGER
+            )
+            """.trimIndent(),
+            "CREATE INDEX IF NOT EXISTS idx_gmail_received ON gmail_messages(received_at DESC)",
         )
 
         @Volatile private var instance: DaybookDatabase? = null

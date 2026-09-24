@@ -42,6 +42,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -163,23 +168,55 @@ private fun ConversationBubble(
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
             modifier = Modifier.fillMaxWidth(0.8f),
         ) {
+            val bubbleShape = if (isUser) {
+                RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 4.dp)
+            } else {
+                RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
+            }
+
+            val bubbleBrush = if (isUser) {
+                Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.90f),
+                    )
+                )
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.70f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    )
+                )
+            }
+
+            val borderBrush = if (isUser) {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.4f),
+                        Color.Transparent,
+                    )
+                )
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.85f),
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
+                        Color.White.copy(alpha = 0.40f),
+                    )
+                )
+            }
+
             Box(
                 modifier = Modifier
-                    .background(
-                        color = if (isUser) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant,
-                        shape = if (isUser) {
-                            RoundedCornerShape(
-                                topStart = 16.dp, topEnd = 16.dp,
-                                bottomStart = 16.dp, bottomEnd = 4.dp,
-                            )
-                        } else {
-                            RoundedCornerShape(
-                                topStart = 4.dp, topEnd = 16.dp,
-                                bottomStart = 16.dp, bottomEnd = 16.dp,
-                            )
-                        },
+                    .shadow(
+                        elevation = if (isUser) 2.dp else 1.dp,
+                        shape = bubbleShape,
+                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                     )
+                    .clip(bubbleShape)
+                    .background(bubbleBrush)
+                    .border(1.dp, borderBrush, bubbleShape)
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 if (isUser) {

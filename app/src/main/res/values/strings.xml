@@ -330,6 +330,9 @@
     <string name="conversation_empty_title">Ask me anything</string>
     <string name="conversation_empty_body">Try: \"Add a task to call the bank tomorrow\" or \"Log a note about today\'s meeting\"</string>
 
+    <!-- Gmail integration -->
+    <string name="gmail_action_converted">Added to your board</string>
+
 </resources>
 
 

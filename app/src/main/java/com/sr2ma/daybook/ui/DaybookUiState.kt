@@ -136,6 +136,10 @@ data class DaybookUiState(
      *  notification-reader is disabled or no messages have been received yet. */
     val recentWhatsAppMessages: List<WhatsAppMessage> = emptyList(),
 
+    // ── Gmail integration ───────────────────────────────────────────────────
+    /** Recent actionable or primary Gmail messages shown in the Today board. */
+    val recentGmailMessages: List<com.sr2ma.daybook.domain.model.GmailMessage> = emptyList(),
+
     // ── Agent conversation ────────────────────────────────────────────────────
     /** True while the ConversationSheet is open. */
     val conversationOpen: Boolean = false,

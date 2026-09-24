@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.sync
+package com.sr2ma.daybook.sync
 
 import android.content.Context
 import com.sr2ma.daybook.data.DaybookDatabase
@@ -80,6 +80,19 @@ class SyncManager(
     /** Enqueues an immediate Drive backup (user pressed "Back up now"). */
     fun backupNow() {
         DriveBackupWorker.enqueueOnce(context)
+    }
+
+    /** Enables or disables Gmail sync. */
+    fun setGmailSync(enabled: Boolean) {
+        syncPrefs.gmailSync = enabled
+    }
+
+    /** Triggers on-demand Gmail sync and action extraction. */
+    suspend fun syncGmailNow(): GmailSyncEngine.SyncResult {
+        val db = DaybookDatabase.getInstance(context)
+        val dao = com.sr2ma.daybook.data.dao.GmailDao(db)
+        val engine = GmailSyncEngine(dao, syncPrefs)
+        return engine.sync()
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.sr2ma.daybook.ui.screens
+﻿package com.sr2ma.daybook.ui.screens
 
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
@@ -61,6 +61,10 @@ import com.sr2ma.daybook.ui.components.LogEntryRow
 import com.sr2ma.daybook.ui.components.MeetingRow
 import com.sr2ma.daybook.ui.components.SectionHeader
 import com.sr2ma.daybook.ui.components.TaskRow
+import androidx.compose.material3.Button
+import androidx.compose.ui.text.style.TextOverflow
+import com.sr2ma.daybook.domain.model.GmailMessage
+import com.sr2ma.daybook.ui.components.GlassCard
 import com.sr2ma.daybook.ui.theme.DaybookAccents
 import com.sr2ma.daybook.whatsapp.WhatsAppReplyHelper
 import java.time.LocalDate
@@ -201,6 +205,7 @@ fun TodayScreen(
             }
             logSection(entries = board.log, today = state.today, viewModel = viewModel)
             whatsAppSection(messages = state.recentWhatsAppMessages)
+            gmailSection(messages = state.recentGmailMessages, onConvert = viewModel::convertGmailAction, onDismiss = viewModel::dismissGmailMessage)
         }
     }
 }
@@ -272,7 +277,7 @@ private fun WhatsAppMessageCard(msg: WhatsAppMessage) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = msg.message.take(80) + if (msg.message.length > 80) "…" else "",
+                    text = msg.message.take(80) + if (msg.message.length > 80) "â€¦" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
@@ -315,26 +320,31 @@ private fun <T> LazyListScope.boardSection(
 /** The date, written out, with a quiet tally of what has already been finished. */
 @Composable
 private fun DayHeader(today: LocalDate, completedToday: Int) {
-    Column(modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)) {
-        Text(
-            text = Dates.weekdayLong(today),
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 3.dp),
-        ) {
+    GlassCard(
+        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+        animatedSheen = true,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(
-                text = Dates.shortLabel(today, today),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = Dates.weekdayLong(today),
+                style = MaterialTheme.typography.headlineSmall,
             )
-            if (completedToday > 0) {
-                AccentChip(
-                    text = stringResource(R.string.today_completed_count, completedToday),
-                    accent = DaybookAccents.done,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Text(
+                    text = Dates.shortLabel(today, today),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (completedToday > 0) {
+                    AccentChip(
+                        text = stringResource(R.string.today_completed_count, completedToday),
+                        accent = DaybookAccents.done,
+                    )
+                }
             }
         }
     }
@@ -391,11 +401,11 @@ private fun QuickAddField(
     )
 }
 
-// ── Active Passes Widget ───────────────────────────────────────────────────────
+// â”€â”€ Active Passes Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Shows up to 3 active (non-expired) passes as horizontal chips on the Today dashboard.
- * Two action buttons: "View more" → Wallet tab, "+" → add a new pass.
+ * Two action buttons: "View more" â†’ Wallet tab, "+" â†’ add a new pass.
  */
 @Composable
 fun ActivePassesWidget(
@@ -489,5 +499,100 @@ fun ActivePassesWidget(
             }
         }
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+
+// ── Gmail actionable emails section ──────────────────────────────────────────
+
+private fun LazyListScope.gmailSection(
+    messages: List<GmailMessage>,
+    onConvert: (GmailMessage) -> Unit,
+    onDismiss: (GmailMessage) -> Unit,
+) {
+    if (messages.isEmpty()) return
+    item(key = "gmail-header") {
+        SectionHeader(
+            title = "Emails & Actions",
+            count = messages.size,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+    }
+    items(items = messages, key = { "gmail-${it.id}" }) { msg ->
+        GmailMessageCard(msg = msg, onConvert = onConvert, onDismiss = onDismiss)
+    }
+}
+
+@Composable
+private fun GmailMessageCard(
+    msg: GmailMessage,
+    onConvert: (GmailMessage) -> Unit,
+    onDismiss: (GmailMessage) -> Unit,
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = msg.sender,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (msg.suggestedAction != null) {
+                    AccentChip(
+                        text = "Action detected",
+                        accent = DaybookAccents.priorityMedium,
+                    )
+                }
+            }
+            Text(
+                text = msg.subject,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            if (msg.snippet.isNotBlank()) {
+                Text(
+                    text = msg.snippet.take(90) + if (msg.snippet.length > 90) "…" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            if (msg.suggestedAction != null && msg.actionedAt == null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = { onDismiss(msg) }) {
+                        Text("Dismiss")
+                    }
+                    Button(
+                        onClick = { onConvert(msg) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = if (msg.suggestedAction.startsWith("Meeting:", ignoreCase = true)) "+ Add Meeting" else "+ Add Task",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

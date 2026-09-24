@@ -31,6 +31,9 @@ import com.sr2ma.daybook.ai.LlmEngine
 import com.sr2ma.daybook.ai.ModelDownloader
 import com.sr2ma.daybook.domain.ConversationLlmRouter
 import com.sr2ma.daybook.data.dao.WhatsAppDao
+import com.sr2ma.daybook.data.dao.GmailDao
+import com.sr2ma.daybook.domain.model.GmailMessage
+import com.sr2ma.daybook.domain.model.TaskStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +67,7 @@ class DaybookViewModel(
 ) : ViewModel() {
 
     private val whatsAppDao = WhatsAppDao(repository.database)
+    private val gmailDao = GmailDao(repository.database)
 
     private val _state = MutableStateFlow(derive(DaybookUiState(today = Dates.today())))
     val state: StateFlow<DaybookUiState> = _state.asStateFlow()
@@ -88,8 +92,9 @@ class DaybookViewModel(
                 update { it.copy(loaded = true) }
             }
         }
-        // Load recent WhatsApp messages for the Today board.
+        // Load recent WhatsApp and Gmail messages for the Today board.
         loadRecentWhatsAppMessages()
+        loadRecentGmailMessages()
         // Every write refreshes a repository flow, which lands here and re-derives.
         // Collecting the flows separately keeps each write cheap: only the
         // list that actually changed is re-read from SQLite by the repository.
@@ -131,6 +136,58 @@ class DaybookViewModel(
         viewModelScope.launch {
             val msgs = withContext(Dispatchers.IO) { whatsAppDao.recentMessages(20) }
             update { it.copy(recentWhatsAppMessages = msgs) }
+        }
+    }
+
+    /** Refresh recent actionable or primary Gmail messages shown in the Today board. */
+    fun loadRecentGmailMessages() {
+        viewModelScope.launch {
+            val msgs = withContext(Dispatchers.IO) { gmailDao.recentMessages(15, filterSpamAndPromo = true) }
+            update { it.copy(recentGmailMessages = msgs) }
+        }
+    }
+
+    /**
+     * Converts a suggested action from an email into a real Task or Meeting with 1 tap.
+     */
+    fun convertGmailAction(msg: GmailMessage) {
+        val action = msg.suggestedAction ?: return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                gmailDao.markActioned(msg.id)
+                if (action.startsWith("Task:", ignoreCase = true)) {
+                    val raw = action.removePrefix("Task:").trim()
+                    val parsed = NaturalLanguageParser.parse(raw, _state.value.today)
+                    val task = Task(
+                        title = parsed.taskTitle ?: raw,
+                        dueDate = parsed.dueDate ?: _state.value.today,
+                        priority = parsed.priority,
+                        status = TaskStatus.OPEN,
+                    )
+                    repository.saveTask(task)
+                } else if (action.startsWith("Meeting:", ignoreCase = true)) {
+                    val raw = action.removePrefix("Meeting:").trim()
+                    val parsed = NaturalLanguageParser.parse(raw, _state.value.today)
+                    val meeting = Meeting(
+                        title = parsed.meetingTitle ?: raw,
+                        day = parsed.dueDate ?: _state.value.today,
+                        attendees = parsed.meetingAttendees.joinToString(", "),
+                    )
+                    repository.saveMeeting(meeting)
+                }
+            }
+            loadRecentGmailMessages()
+            update { it.copy(message = nextMessage(R.string.gmail_action_converted)) }
+        }
+    }
+
+    /** Dismiss an email card from the Today board. */
+    fun dismissGmailMessage(msg: GmailMessage) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                gmailDao.delete(msg.id)
+            }
+            loadRecentGmailMessages()
         }
     }
 

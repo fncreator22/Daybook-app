@@ -62,6 +62,18 @@ class SyncPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_DRIVE_AUTO_BACKUP, false)
         set(value) = prefs.edit().putBoolean(KEY_DRIVE_AUTO_BACKUP, value).apply()
 
+    var gmailSync: Boolean
+        get() = prefs.getBoolean(KEY_GMAIL_SYNC, false)
+        set(value) = prefs.edit().putBoolean(KEY_GMAIL_SYNC, value).apply()
+
+    var gmailFilterSpam: Boolean
+        get() = prefs.getBoolean(KEY_GMAIL_FILTER_SPAM, true)
+        set(value) = prefs.edit().putBoolean(KEY_GMAIL_FILTER_SPAM, value).apply()
+
+    var gmailFilterMarketing: Boolean
+        get() = prefs.getBoolean(KEY_GMAIL_FILTER_MARKETING, true)
+        set(value) = prefs.edit().putBoolean(KEY_GMAIL_FILTER_MARKETING, value).apply()
+
     // ── Last-sync timestamps ──────────────────────────────────────────────────
 
     var lastCalendarSyncAt: Long
@@ -71,6 +83,10 @@ class SyncPreferences(context: Context) {
     var lastDriveBackupAt: Long
         get() = prefs.getLong(KEY_LAST_DRIVE_BACKUP, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_DRIVE_BACKUP, value).apply()
+
+    var lastGmailSyncAt: Long
+        get() = prefs.getLong(KEY_LAST_GMAIL_SYNC, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_GMAIL_SYNC, value).apply()
 
     // ── Sign-out ──────────────────────────────────────────────────────────────
 
@@ -113,6 +129,10 @@ class SyncPreferences(context: Context) {
         private const val KEY_DRIVE_AUTO_BACKUP = "drive_auto_backup"
         private const val KEY_LAST_CALENDAR_SYNC = "last_calendar_sync"
         private const val KEY_LAST_DRIVE_BACKUP = "last_drive_backup"
+        private const val KEY_GMAIL_SYNC = "gmail_sync"
+        private const val KEY_GMAIL_FILTER_SPAM = "gmail_filter_spam"
+        private const val KEY_GMAIL_FILTER_MARKETING = "gmail_filter_marketing"
+        private const val KEY_LAST_GMAIL_SYNC = "last_gmail_sync"
     }
 }
 

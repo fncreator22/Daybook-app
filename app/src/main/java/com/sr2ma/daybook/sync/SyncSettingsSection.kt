@@ -137,6 +137,32 @@ fun SyncSettingsSection(
                     enabled = state.isSignedIn,
                     onCheckedChange = { syncViewModel.toggleDriveAutoBackup() },
                 )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                SyncToggleRow(
+                    title = "Gmail sync & action extraction",
+                    subtitle = "Reads incoming emails to extract tasks and meetings",
+                    checked = state.gmailSync,
+                    enabled = state.isSignedIn,
+                    onCheckedChange = { syncViewModel.toggleGmailSync() },
+                )
+                if (state.gmailSync) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                    SyncToggleRow(
+                        title = "Filter spam emails",
+                        subtitle = "Ignore suspicious emails and prize scams",
+                        checked = state.gmailFilterSpam,
+                        enabled = state.isSignedIn,
+                        onCheckedChange = { syncViewModel.toggleGmailFilterSpam() },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
+                    SyncToggleRow(
+                        title = "Filter marketing newsletters",
+                        subtitle = "Ignore promotional emails and discounts",
+                        checked = state.gmailFilterMarketing,
+                        enabled = state.isSignedIn,
+                        onCheckedChange = { syncViewModel.toggleGmailFilterMarketing() },
+                    )
+                }
             }
         }
 
@@ -208,6 +234,30 @@ fun SyncSettingsSection(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        if (state.gmailSync) {
+            Spacer(Modifier.height(8.dp))
+            DaybookCard(onClick = if (state.isSignedIn && !state.busy) syncViewModel::syncGmailNow else null) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
+                    Text("Sync Gmail now", style = MaterialTheme.typography.bodyLarge)
+                    if (state.lastGmailSyncAt > 0L) {
+                        Text(
+                            text = "Last: ${formatTimestamp(state.lastGmailSyncAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    state.gmailSyncMessage?.let { msg ->
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
             }
         }
     }

@@ -37,6 +37,10 @@ class SyncViewModel(
             driveAutoBackup = prefs.driveAutoBackup,
             lastCalendarSyncAt = prefs.lastCalendarSyncAt,
             lastDriveBackupAt = prefs.lastDriveBackupAt,
+            gmailSync = prefs.gmailSync,
+            gmailFilterSpam = prefs.gmailFilterSpam,
+            gmailFilterMarketing = prefs.gmailFilterMarketing,
+            lastGmailSyncAt = prefs.lastGmailSyncAt,
             autonomyLevels = ToolCategory.entries.associateWith { prefs.getAutonomy(it) },
         )
     }
@@ -120,6 +124,46 @@ class SyncViewModel(
         _state.value = _state.value.copy(driveAutoBackup = newValue)
     }
 
+    fun toggleGmailSync() {
+        val newValue = !_state.value.gmailSync
+        syncManager.setGmailSync(newValue)
+        _state.value = _state.value.copy(gmailSync = newValue)
+    }
+
+    fun toggleGmailFilterSpam() {
+        val newValue = !_state.value.gmailFilterSpam
+        syncManager.syncPrefs.gmailFilterSpam = newValue
+        _state.value = _state.value.copy(gmailFilterSpam = newValue)
+    }
+
+    fun toggleGmailFilterMarketing() {
+        val newValue = !_state.value.gmailFilterMarketing
+        syncManager.syncPrefs.gmailFilterMarketing = newValue
+        _state.value = _state.value.copy(gmailFilterMarketing = newValue)
+    }
+
+    fun syncGmailNow() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(busy = true)
+            val result = syncManager.syncGmailNow()
+            val msg = when (result) {
+                is GmailSyncEngine.SyncResult.Success ->
+                    "Synced ${result.fetchedCount} emails (${result.actionableCount} action items found)"
+                is GmailSyncEngine.SyncResult.Error ->
+                    result.message
+            }
+            _state.value = _state.value.copy(
+                busy = false,
+                lastGmailSyncAt = syncManager.syncPrefs.lastGmailSyncAt,
+                gmailSyncMessage = msg,
+            )
+        }
+    }
+
+    fun consumeGmailSyncMessage() {
+        _state.value = _state.value.copy(gmailSyncMessage = null)
+    }
+
     // ── Actions ───────────────────────────────────────────────────────────────
 
     fun syncNow() {
@@ -181,14 +225,20 @@ data class SyncUiState(
     val calendarSyncMeetings: Boolean = false,
     val calendarSyncTasks: Boolean = false,
     val driveAutoBackup: Boolean = false,
+    val gmailSync: Boolean = false,
+    val gmailFilterSpam: Boolean = true,
+    val gmailFilterMarketing: Boolean = true,
     val lastCalendarSyncAt: Long = 0L,
     val lastDriveBackupAt: Long = 0L,
+    val lastGmailSyncAt: Long = 0L,
     val busy: Boolean = false,
     val syncEnqueued: Boolean = false,
     val backupEnqueued: Boolean = false,
     val showRestorePicker: Boolean = false,
     val driveBackups: List<DriveBackupWorker.DriveFile> = emptyList(),
     val errorMessage: String? = null,
+    val gmailSyncMessage: String? = null,
     /** Per-tool autonomy levels. Default ASK_EVERY_TIME for all categories. */
     val autonomyLevels: Map<ToolCategory, AutonomyLevel> = emptyMap(),
 )
+
