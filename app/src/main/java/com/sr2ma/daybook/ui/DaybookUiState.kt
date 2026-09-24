@@ -146,6 +146,15 @@ data class DaybookUiState(
     val conversationMessages: List<com.sr2ma.daybook.domain.ConversationMessage> = emptyList(),
     /** True while the agent is computing a response (shows thinking dots). */
     val agentThinking: Boolean = false,
+    /**
+     * The most recent [ParseResult] produced by [NaturalLanguageParser] during
+     * a conversation turn. Cleared when the sheet closes.
+     *
+     * This is what action chips ("Add as task", "Add as meeting", etc.) act on
+     * when tapped — Stage 3 wiring that replaces the stub echo from Stage 2.
+     * Null = no NLP result yet in this session.
+     */
+    val lastConversationParseResult: com.sr2ma.daybook.domain.ParseResult? = null,
 ) {
     val taskCount: Int get() = tasks.size
     val logCount: Int get() = logEntries.size

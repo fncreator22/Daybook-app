@@ -369,7 +369,14 @@ class DaybookViewModel(
      */
     fun closeConversation() {
         val session = _state.value.conversationMessages
-        update { it.copy(conversationOpen = false, conversationMessages = emptyList(), agentThinking = false) }
+        update {
+            it.copy(
+                conversationOpen = false,
+                conversationMessages = emptyList(),
+                agentThinking = false,
+                lastConversationParseResult = null,
+            )
+        }
         if (session.isNotEmpty()) {
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
@@ -383,15 +390,24 @@ class DaybookViewModel(
     }
 
     /**
-     * Appends a user message and produces an agent reply.
+     * Appends a user message, runs [NaturalLanguageParser], and produces a
+     * structured agent reply with action chips.
      *
-     * Stage 3 replaces the stub reply with real [NaturalLanguageParser] routing.
-     * For now the agent echoes the first 80 chars with action chips.
+     * The full conversation text is never written to disk; only the extracted
+     * signal (entities, preferences, 1-line summary) is persisted when the sheet
+     * closes via [closeConversation].
+     *
+     * Intent → agent response + chips:
+     * - CREATE_TASK    → "Got it — task: \"X\" …" + [Add task | Dismiss]
+     * - CREATE_MEETING → "Meeting: \"X\" …"        + [Add meeting | Dismiss]
+     * - CREATE_LOG     → "Logging a note: \"X\" …" + [Save | Dismiss]
+     * - UNKNOWN        → clarifying question        + [Add as task | Add as meeting | Add as log | Dismiss]
      */
     fun sendConversationMessage(text: String) {
         if (text.isBlank()) return
+        val safText = text.take(500)
         val userMsg = com.sr2ma.daybook.domain.ConversationMessage(
-            text = text.take(500),
+            text = safText,
             isUser = true,
         )
         update {
@@ -400,30 +416,127 @@ class DaybookViewModel(
                 agentThinking = true,
             )
         }
-        viewModelScope.launch {
-            // Stub: Stage 3 will replace this with NaturalLanguageParser routing.
-            kotlinx.coroutines.delay(700)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val today = _state.value.today
+            val parsed = NaturalLanguageParser.parse(safText, referenceDate = today)
+
+            val (agentText, chips) = when (parsed.intent) {
+                ParsedIntent.CREATE_TASK -> {
+                    val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
+                    val priorityLabel = when (parsed.priority) {
+                        com.sr2ma.daybook.domain.model.Priority.URGENT -> " (urgent)"
+                        com.sr2ma.daybook.domain.model.Priority.HIGH   -> " (high priority)"
+                        com.sr2ma.daybook.domain.model.Priority.LOW    -> " (low priority)"
+                        else                                           -> ""
+                    }
+                    val dateLabel = parsed.dueDate?.let { ", due ${it}" } ?: ""
+                    "Got it — task: \"$title\"$priorityLabel$dateLabel. Add it?" to
+                        listOf("Add task", "Dismiss")
+                }
+                ParsedIntent.CREATE_MEETING -> {
+                    val title = parsed.meetingTitle?.takeIf { it.isNotBlank() } ?: safText
+                    val who = if (parsed.meetingAttendees.isNotEmpty())
+                        " with ${parsed.meetingAttendees.joinToString(", ")}" else ""
+                    val day = parsed.dueDate ?: today
+                    "Meeting: \"$title\"$who on $day. Add it?" to
+                        listOf("Add meeting", "Dismiss")
+                }
+                ParsedIntent.CREATE_LOG -> {
+                    val body = parsed.logBody?.takeIf { it.isNotBlank() } ?: safText
+                    val kindLabel = when (parsed.logKind) {
+                        com.sr2ma.daybook.domain.model.LogKind.WIN      -> "win"
+                        com.sr2ma.daybook.domain.model.LogKind.BLOCKER  -> "blocker"
+                        com.sr2ma.daybook.domain.model.LogKind.DECISION -> "decision"
+                        else                                            -> "note"
+                    }
+                    "Logging a $kindLabel: \"${body.take(80)}\". Save it?" to
+                        listOf("Save", "Dismiss")
+                }
+                ParsedIntent.UNKNOWN -> {
+                    "I'm not sure what to do with that. Did you mean to add a task, " +
+                        "note, or meeting?" to
+                        listOf("Add as task", "Add as meeting", "Add as log", "Dismiss")
+                }
+            }
+
             val agentMsg = com.sr2ma.daybook.domain.ConversationMessage(
-                text = "I heard: \"${text.take(80)}\". What would you like to do?",
+                text = agentText,
                 isUser = false,
-                suggestions = listOf("Add as task", "Add as meeting", "Dismiss"),
+                suggestions = chips,
             )
             update {
                 it.copy(
                     conversationMessages = it.conversationMessages + agentMsg,
                     agentThinking = false,
+                    lastConversationParseResult = parsed,
                 )
             }
         }
     }
 
-    /** Called when the user taps a suggestion chip in the conversation. */
+    /**
+     * Called when the user taps a suggestion chip in the conversation.
+     *
+     * Saves the item described by [lastConversationParseResult] — the NLP result
+     * from the most recent agent turn — then closes the sheet.
+     *
+     * Fallback for UNKNOWN chips: creates a plain task from the last user message.
+     */
     fun onConversationSuggestion(suggestion: String) {
-        when (suggestion) {
-            "Dismiss" -> closeConversation()
-            // Stage 3 wires real task/meeting creation here based on last NLP result.
-            else -> closeConversation()
+        if (suggestion == "Dismiss") {
+            closeConversation()
+            return
         }
+        val parsed = _state.value.lastConversationParseResult
+        val today  = _state.value.today
+        // Grab last user text as fallback title/body
+        val lastUserText = _state.value.conversationMessages
+            .lastOrNull { it.isUser }?.text ?: ""
+
+        when (suggestion) {
+            "Add task" -> {
+                val title = parsed?.taskTitle?.takeIf { it.isNotBlank() } ?: lastUserText
+                write {
+                    repository.saveTask(
+                        Task(
+                            title    = title,
+                            priority = parsed?.priority ?: com.sr2ma.daybook.domain.model.Priority.MEDIUM,
+                            dueDate  = parsed?.dueDate,
+                        )
+                    )
+                }
+            }
+            "Add meeting" -> {
+                val title = parsed?.meetingTitle?.takeIf { it.isNotBlank() } ?: lastUserText
+                val day   = parsed?.dueDate ?: today
+                write {
+                    repository.saveMeeting(Meeting(title = title, day = day))
+                }
+            }
+            "Save" -> {
+                val body = parsed?.logBody?.takeIf { it.isNotBlank() } ?: lastUserText
+                write {
+                    repository.saveLogEntry(
+                        LogEntry(
+                            body = body,
+                            kind = parsed?.logKind ?: com.sr2ma.daybook.domain.model.LogKind.NOTE,
+                            day  = today,
+                        )
+                    )
+                }
+            }
+            // UNKNOWN fallbacks — user picked a type manually
+            "Add as task" -> write {
+                repository.saveTask(Task(title = lastUserText))
+            }
+            "Add as meeting" -> write {
+                repository.saveMeeting(Meeting(title = lastUserText, day = today))
+            }
+            "Add as log" -> write {
+                repository.saveLogEntry(LogEntry(body = lastUserText, day = today))
+            }
+        }
+        closeConversation()
     }
 
     /**
