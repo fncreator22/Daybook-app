@@ -44,17 +44,20 @@ class DaybookDatabase(context: Context) :
         if (oldVersion < 6) MIGRATIONS_V6.forEach(db::execSQL)
         if (oldVersion < 7) MIGRATIONS_V7.forEach(db::execSQL)
         if (oldVersion < 8) MIGRATIONS_V8.forEach(db::execSQL)
+        if (oldVersion < 9) MIGRATIONS_V9.forEach(db::execSQL)
     }
 
     companion object {
         const val DATABASE_NAME = "daybook.db"
-        const val DATABASE_VERSION = 8
+        const val DATABASE_VERSION = 9
 
         const val TABLE_MEETINGS = "meetings"
         const val TABLE_TASKS = "tasks"
         const val TABLE_LOG_ENTRIES = "log_entries"
         const val TABLE_PASSES = "passes"
         const val TABLE_WHATSAPP = "whatsapp_messages"
+        const val TABLE_CONVERSATION_SUMMARIES = "conversation_summaries"
+        const val TABLE_USER_PREFERENCES = "user_preferences"
 
         /**
          * Statements are ordered so `meetings` exists before `tasks` references
@@ -171,6 +174,25 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX idx_whatsapp_received ON whatsapp_messages(received_at)",
             "CREATE INDEX idx_kg_edges_from ON kg_edges(from_node)",
             "CREATE INDEX idx_kg_edges_to   ON kg_edges(to_node)",
+            // v9: conversation memory (cache-tier) + user preference model
+            """
+            CREATE TABLE conversation_summaries (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                summary    TEXT    NOT NULL,
+                entities   TEXT    NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+            """
+            CREATE TABLE user_preferences (
+                key          TEXT    PRIMARY KEY,
+                value_float  REAL,
+                value_text   TEXT,
+                confidence   REAL    NOT NULL DEFAULT 0.1,
+                sample_count INTEGER NOT NULL DEFAULT 1,
+                updated_at   INTEGER NOT NULL
+            )
+            """.trimIndent(),
         )
 
         // Ã¢â€â‚¬Ã¢â€â‚¬ Incremental migrations (applied in onUpgrade) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -266,6 +288,29 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX IF NOT EXISTS idx_kg_edges_from ON kg_edges(from_node)",
             "CREATE INDEX IF NOT EXISTS idx_kg_edges_to   ON kg_edges(to_node)",
         )
+
+        /** v8 → v9: conversation memory (cache-tier) + user preference model */
+        val MIGRATIONS_V9: List<String> = listOf(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                summary    TEXT    NOT NULL,
+                entities   TEXT    NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+            """
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                key          TEXT    PRIMARY KEY,
+                value_float  REAL,
+                value_text   TEXT,
+                confidence   REAL    NOT NULL DEFAULT 0.1,
+                sample_count INTEGER NOT NULL DEFAULT 1,
+                updated_at   INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+
         @Volatile private var instance: DaybookDatabase? = null
 
         /**

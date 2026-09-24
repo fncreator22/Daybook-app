@@ -135,6 +135,17 @@ data class DaybookUiState(
     /** Most recent WhatsApp messages, shown in the Today board. Empty when the
      *  notification-reader is disabled or no messages have been received yet. */
     val recentWhatsAppMessages: List<WhatsAppMessage> = emptyList(),
+
+    // ── Agent conversation ────────────────────────────────────────────────────
+    /** True while the ConversationSheet is open. */
+    val conversationOpen: Boolean = false,
+    /**
+     * In-session messages (RAM only — never persisted to disk).
+     * Cleared when [conversationOpen] becomes false.
+     */
+    val conversationMessages: List<com.sr2ma.daybook.domain.ConversationMessage> = emptyList(),
+    /** True while the agent is computing a response (shows thinking dots). */
+    val agentThinking: Boolean = false,
 ) {
     val taskCount: Int get() = tasks.size
     val logCount: Int get() = logEntries.size

@@ -355,8 +355,79 @@ class DaybookViewModel(
     /** User dismissed the confirmation sheet without saving. */
     fun dismissVoiceResult() = update { it.copy(voiceResult = null) }
 
+    // ── Agent conversation ────────────────────────────────────────────────────
+
+    /** Opens the ConversationSheet. */
+    fun openConversation() = update { it.copy(conversationOpen = true) }
+
     /**
-     * Called from MainActivity when the user shares text from another app
+     * Closes the ConversationSheet and runs the memory extraction pass.
+     *
+     * [ConversationMemoryEngine.extract] writes only the signal (entities,
+     * preferences, one-line summary) to the DB — the full message list is
+     * discarded from RAM here and never touches disk.
+     */
+    fun closeConversation() {
+        val session = _state.value.conversationMessages
+        update { it.copy(conversationOpen = false, conversationMessages = emptyList(), agentThinking = false) }
+        if (session.isNotEmpty()) {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    com.sr2ma.daybook.domain.ConversationMemoryEngine.extract(
+                        session,
+                        repository.database,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Appends a user message and produces an agent reply.
+     *
+     * Stage 3 replaces the stub reply with real [NaturalLanguageParser] routing.
+     * For now the agent echoes the first 80 chars with action chips.
+     */
+    fun sendConversationMessage(text: String) {
+        if (text.isBlank()) return
+        val userMsg = com.sr2ma.daybook.domain.ConversationMessage(
+            text = text.take(500),
+            isUser = true,
+        )
+        update {
+            it.copy(
+                conversationMessages = it.conversationMessages + userMsg,
+                agentThinking = true,
+            )
+        }
+        viewModelScope.launch {
+            // Stub: Stage 3 will replace this with NaturalLanguageParser routing.
+            kotlinx.coroutines.delay(700)
+            val agentMsg = com.sr2ma.daybook.domain.ConversationMessage(
+                text = "I heard: \"${text.take(80)}\". What would you like to do?",
+                isUser = false,
+                suggestions = listOf("Add as task", "Add as meeting", "Dismiss"),
+            )
+            update {
+                it.copy(
+                    conversationMessages = it.conversationMessages + agentMsg,
+                    agentThinking = false,
+                )
+            }
+        }
+    }
+
+    /** Called when the user taps a suggestion chip in the conversation. */
+    fun onConversationSuggestion(suggestion: String) {
+        when (suggestion) {
+            "Dismiss" -> closeConversation()
+            // Stage 3 wires real task/meeting creation here based on last NLP result.
+            else -> closeConversation()
+        }
+    }
+
+    /**
+     * Called from [com.sr2ma.daybook.MainActivity] when the user shares text from another app
      * (Gmail, WhatsApp, browser) into Daybook. Runs the text through
      * NaturalLanguageParser and shows the VoiceResultSheet confirmation card
      * so the user can review before saving — identical UX to voice input.

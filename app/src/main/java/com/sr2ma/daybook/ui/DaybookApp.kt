@@ -9,7 +9,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -238,6 +240,17 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
         )
     }
 
+    // Multi-turn conversation sheet — opened by long-pressing the mic FAB.
+    if (state.conversationOpen) {
+        com.sr2ma.daybook.ui.screens.ConversationSheet(
+            messages = state.conversationMessages,
+            agentThinking = state.agentThinking,
+            onSend = viewModel::sendConversationMessage,
+            onSuggestionTap = viewModel::onConversationSuggestion,
+            onDismiss = viewModel::closeConversation,
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = { DaybookNavigationBar(selected = state.tab, onSelect = viewModel::selectTab) },
@@ -249,6 +262,7 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
                     VoiceAgentButton(
                         isListening = state.isListening,
                         onTap = ::launchMic,
+                        onLongPress = viewModel::openConversation,
                     )
                 }
             },
@@ -469,13 +483,16 @@ private fun LoadingGate(modifier: Modifier = Modifier) {
 
 /**
  * Floating mic button. Tapping it starts the voice agent.
+ * Long-pressing it opens the multi-turn [ConversationSheet].
  * While listening, the [ListeningSheet] handles the UX — this button
  * just changes colour to indicate active state.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VoiceAgentButton(
     isListening: Boolean,
     onTap: () -> Unit,
+    onLongPress: () -> Unit,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by infiniteTransition.animateFloat(
@@ -512,6 +529,11 @@ private fun VoiceAgentButton(
         }
         FloatingActionButton(
             onClick = onTap,
+            modifier = Modifier.combinedClickable(
+                onClick = onTap,
+                onLongClick = onLongPress,
+                onLongClickLabel = "Open conversation",
+            ),
             containerColor = if (isListening) MaterialTheme.colorScheme.primaryContainer
             else MaterialTheme.colorScheme.secondaryContainer,
         ) {
