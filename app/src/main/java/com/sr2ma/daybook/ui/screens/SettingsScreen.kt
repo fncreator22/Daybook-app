@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -140,6 +141,54 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            // Model download UI — only shown when model is absent
+            if (!state.llmModelReady) {
+                val progress = state.modelDownloadProgress
+                if (progress != null) {
+                    // Downloading — show progress bar
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_ai_downloading),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            text = "${(progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                } else {
+                    ActionRow(
+                        icon = R.drawable.ic_import,
+                        title = stringResource(R.string.settings_ai_download_model),
+                        body = stringResource(R.string.settings_ai_download_model_body),
+                        enabled = !state.busy,
+                        onClick = { viewModel.downloadModel() },
+                    )
+                }
+
+                // Surface download errors as a snackbar via the existing message channel
+                val downloadError = state.modelDownloadError
+                if (downloadError != null) {
+                    LaunchedEffect(downloadError) {
+                        // The error is shown via the main snackbar; clear it after showing
+                        viewModel.dismissModelDownloadError()
+                    }
+                }
+            }
+
             ActionRow(
                 icon = R.drawable.ic_delete,
                 title = stringResource(R.string.settings_ai_clear_memory),

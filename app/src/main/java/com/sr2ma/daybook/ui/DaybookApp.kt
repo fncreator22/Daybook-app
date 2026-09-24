@@ -248,6 +248,7 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
             onSend = viewModel::sendConversationMessage,
             onSuggestionTap = viewModel::onConversationSuggestion,
             onDismiss = viewModel::closeConversation,
+            onVoiceTap = viewModel::startListening,
         )
     }
 
@@ -494,6 +495,7 @@ private fun VoiceAgentButton(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
 ) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -531,7 +533,12 @@ private fun VoiceAgentButton(
             onClick = onTap,
             modifier = Modifier.combinedClickable(
                 onClick = onTap,
-                onLongClick = onLongPress,
+                onLongClick = {
+                    haptic.performHapticFeedback(
+                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
+                    )
+                    onLongPress()
+                },
                 onLongClickLabel = "Open conversation",
             ),
             containerColor = if (isListening) MaterialTheme.colorScheme.primaryContainer

@@ -318,6 +318,17 @@
     <!-- AI action feedback snackbars -->
     <string name="ai_memory_cleared">Conversation memory cleared</string>
     <string name="ai_preferences_reset">Learned preferences reset</string>
+    <string name="ai_model_downloaded">AI model ready — conversation fully powered</string>
+
+    <!-- Model download UI -->
+    <string name="settings_ai_download_model">Download AI model</string>
+    <string name="settings_ai_download_model_body">Downloads Gemma 270M (~290 MB) from HuggingFace. Requires internet and free storage.</string>
+    <string name="settings_ai_downloading">Downloading AI model…</string>
+    <string name="settings_ai_download_error_prefix">Download failed: </string>
+
+    <!-- ConversationSheet empty state -->
+    <string name="conversation_empty_title">Ask me anything</string>
+    <string name="conversation_empty_body">Try: \"Add a task to call the bank tomorrow\" or \"Log a note about today\'s meeting\"</string>
 
 </resources>
 

@@ -446,6 +446,56 @@ class DaybookViewModel(
     }
 
     /**
+     * Downloads the Gemma 270M model from HuggingFace to internal storage.
+     *
+     * Progress is reported via [DaybookUiState.modelDownloadProgress] (0.0–1.0).
+     * On success: model is marked ready and [DaybookUiState.llmModelReady] becomes true.
+     * On failure: [DaybookUiState.modelDownloadError] is set for display, download UI resets.
+     *
+     * Requires HuggingFace account + Gemma license acceptance.
+     */
+    fun downloadModel() {
+        val downloader = modelDownloader ?: return
+        if (downloader.isModelPresent()) {
+            update { it.copy(llmModelReady = true) }
+            return
+        }
+        if (state.value.modelDownloadProgress != null) return  // already downloading
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            update { it.copy(modelDownloadProgress = 0f) }
+            val result = downloader.download(
+                url = com.sr2ma.daybook.ai.ModelDownloader.GEMMA_270M_V1_URL,
+                expectedSha256 = com.sr2ma.daybook.ai.ModelDownloader.GEMMA_270M_V1_SHA256,
+                versionTag = "v1",
+                onProgress = com.sr2ma.daybook.ai.ModelDownloader.ProgressListener { downloaded, total ->
+                    val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                    update { it.copy(modelDownloadProgress = progress) }
+                },
+            )
+            when (result) {
+                is com.sr2ma.daybook.ai.ModelDownloader.DownloadResult.Success -> {
+                    update { it.copy(
+                        modelDownloadProgress = null,
+                        llmModelReady = true,
+                        message = nextMessage(R.string.ai_model_downloaded),
+                    ) }
+                }
+                is com.sr2ma.daybook.ai.ModelDownloader.DownloadResult.Failure -> {
+                    update { it.copy(
+                        modelDownloadProgress = null,
+                        modelDownloadError = result.reason,
+                    ) }
+                }
+            }
+        }
+    }
+
+    /** Clears the model download error after the Settings screen has shown it. */
+    fun dismissModelDownloadError() {
+        update { it.copy(modelDownloadError = null) }
+    }
+
+    /**
      * Appends a user message, runs [NaturalLanguageParser], and produces a
      * structured agent reply with action chips.
      *

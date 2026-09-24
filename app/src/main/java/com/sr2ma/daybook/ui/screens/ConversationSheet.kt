@@ -45,6 +45,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.ConversationMessage
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -67,6 +71,7 @@ fun ConversationSheet(
     onSend: (String) -> Unit,
     onSuggestionTap: (String) -> Unit,
     onDismiss: () -> Unit,
+    onVoiceTap: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listState = rememberLazyListState()
@@ -91,17 +96,42 @@ fun ConversationSheet(
                 modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 8.dp),
             )
 
-            // ── Message list ──────────────────────────────────────────────────
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(messages, key = { it.timestampMs }) { msg ->
-                    ConversationBubble(msg = msg, onSuggestionTap = onSuggestionTap)
+            // ── Message list or empty state ───────────────────────────────────
+            if (messages.isEmpty() && !agentThinking) {
+                // Empty state — centred hint to get the user started
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = stringResource(R.string.conversation_empty_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.conversation_empty_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(messages, key = { it.timestampMs }) { msg ->
+                        ConversationBubble(msg = msg, onSuggestionTap = onSuggestionTap)
+                    }
                 }
             }
 
@@ -111,7 +141,7 @@ fun ConversationSheet(
             }
 
             // ── Input ─────────────────────────────────────────────────────────
-            ConversationInputRow(onSend = onSend)
+            ConversationInputRow(onSend = onSend, onVoiceTap = onVoiceTap)
         }
     }
 }
@@ -266,7 +296,10 @@ private fun SuggestionChipRow(
 // ── ConversationInputRow ──────────────────────────────────────────────────────
 
 @Composable
-private fun ConversationInputRow(onSend: (String) -> Unit) {
+private fun ConversationInputRow(
+    onSend: (String) -> Unit,
+    onVoiceTap: (() -> Unit)? = null,
+) {
     var text by remember { mutableStateOf("") }
 
     Row(
@@ -277,6 +310,16 @@ private fun ConversationInputRow(onSend: (String) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Mic button — only shown when voice callback is provided
+        if (onVoiceTap != null) {
+            IconButton(onClick = onVoiceTap) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_mic),
+                    contentDescription = "Voice input",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },

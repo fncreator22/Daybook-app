@@ -58,11 +58,25 @@ object ConversationLlmRouter {
         db: DaybookDatabase,
     ): RouteResult {
         val prompt = buildPrompt(userText, today, db)
-        return when (val result = llmEngine.infer(prompt)) {
-            is LlmEngine.InferResult.Success    -> parseResponse(result.text, today)
+        val firstResult = when (val r = llmEngine.infer(prompt)) {
+            is LlmEngine.InferResult.Success       -> parseResponse(r.text, today)
+            is LlmEngine.InferResult.ModelNotReady -> return RouteResult.ModelNotReady
+            is LlmEngine.InferResult.Timeout       -> return RouteResult.Timeout
+            is LlmEngine.InferResult.Failure       -> return RouteResult.Failure(r.cause)
+        }
+
+        // If parsing succeeded, return immediately.
+        if (firstResult is RouteResult.Classified) return firstResult
+
+        // ── Hallucination guard: one retry with a minimal prompt ──────────────
+        // The first attempt may have produced prose before/after the JSON, or
+        // used wrong field names. A shorter, more directive prompt often fixes it.
+        val retryPrompt = buildRetryPrompt(userText, today)
+        return when (val r2 = llmEngine.infer(retryPrompt)) {
+            is LlmEngine.InferResult.Success       -> parseResponse(r2.text, today)
             is LlmEngine.InferResult.ModelNotReady -> RouteResult.ModelNotReady
-            is LlmEngine.InferResult.Timeout    -> RouteResult.Timeout
-            is LlmEngine.InferResult.Failure    -> RouteResult.Failure(result.cause)
+            is LlmEngine.InferResult.Timeout       -> RouteResult.Timeout
+            is LlmEngine.InferResult.Failure       -> RouteResult.Failure(r2.cause)
         }
     }
 
@@ -84,6 +98,14 @@ object ConversationLlmRouter {
         sb.append("\n\nRespond with ONLY the JSON object, nothing else:")
         return sb.toString()
     }
+
+    /**
+     * Minimal retry prompt — no context, just message + ultra-strict instruction.
+     * Used when [buildPrompt] response couldn't be parsed as JSON.
+     */
+    private fun buildRetryPrompt(userText: String, today: LocalDate): String =
+        "Today: $today. Message: \"$userText\"\n" +
+        "Output ONLY this JSON (no other text): {\"intent\":\"task\"|\"meeting\"|\"log\"|\"unknown\",\"title\":\"...\",\"due\":\"YYYY-MM-DD\"}"
 
     // ── Response parsing ──────────────────────────────────────────────────────
 

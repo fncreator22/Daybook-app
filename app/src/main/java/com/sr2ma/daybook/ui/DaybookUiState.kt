@@ -164,6 +164,18 @@ data class DaybookUiState(
      * message rather than attempting inference (which would return [InferResult.ModelNotReady]).
      */
     val llmModelReady: Boolean = false,
+
+    /**
+     * Non-null while the Gemma model is being downloaded (0.0–1.0).
+     * Null when no download is in progress.
+     */
+    val modelDownloadProgress: Float? = null,
+
+    /**
+     * Set when a model download attempt fails — shown as a snackbar in Settings.
+     * Cleared after display.
+     */
+    val modelDownloadError: String? = null,
 ) {
     val taskCount: Int get() = tasks.size
     val logCount: Int get() = logEntries.size
