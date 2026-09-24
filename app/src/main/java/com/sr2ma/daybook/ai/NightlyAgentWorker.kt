@@ -10,7 +10,6 @@ import androidx.work.WorkerParameters
 import com.sr2ma.daybook.data.DaybookDatabase
 import com.sr2ma.daybook.data.DaybookRepository
 import com.sr2ma.daybook.domain.AgentEngine
-import com.sr2ma.daybook.domain.BriefingWriter
 import com.sr2ma.daybook.domain.KnowledgeGraphEngine
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
@@ -21,9 +20,9 @@ import java.util.concurrent.TimeUnit
  * Architecture (AGENTS.md — LLM is called only from within AgentEngine):
  * ─────────────────────────────────────────────────────────────────────
  * 1. Rule engine runs first, always (deterministic, zero-cost, zero-AI).
- *    - CadenceEngine: generate overdue recurring task instances.
  *    - AgentEngine: produce staleness/completion suggestions.
- *    - BriefingWriter: build tomorrow's briefing string.
+ *    - KnowledgeGraphEngine: build/update OKF dot-to-dot knowledge graph.
+ *    - BriefingWriter: handled separately by BriefingNotificationWorker at 07:30.
  * 2. If AI is available (model downloaded, user opted in):
  *    - EmbeddingEngine: re-embed any tasks/meetings added since last night.
  *    - LlmEngine: invoked by AgentEngine only for unstructured→structured
@@ -48,11 +47,8 @@ class NightlyAgentWorker(
         val allTasks = repository.tasks.value
         val allMeetings = repository.meetings.value
 
-        // ── Step 1: Rule engine (always runs) ─────────────────────────────────
+        // ── Step 1: Rule engine — agent suggestions (always runs) ─────────────
         AgentEngine.computeSuggestions(allTasks, allMeetings, today)
-
-        val todayBoard = com.sr2ma.daybook.domain.TodayBoard(day = today)
-        BriefingWriter.write(todayBoard)
 
         // ── Step 1b: OKF Knowledge Graph — dot-to-dot reasoning ───────────────
         // Deterministic, zero-AI. Builds/updates nodes+edges in kg_nodes/kg_edges.

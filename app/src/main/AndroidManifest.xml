@@ -25,6 +25,13 @@
       Android 13+. Audio is never stored or sent anywhere.
     -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!--
+      POST_NOTIFICATIONS: required on Android 13+ (API 33+) to post the
+      morning briefing notification via BriefingNotificationWorker.
+      The permission is requested at runtime on first app launch on API 33+.
+      On API 32 and below, this permission is granted automatically.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
 
     <application

@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.data
+package com.sr2ma.daybook.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -43,6 +43,7 @@ class DaybookDatabase(context: Context) :
         if (oldVersion < 5) MIGRATIONS_V5.forEach(db::execSQL)
         if (oldVersion < 6) MIGRATIONS_V6.forEach(db::execSQL)
         if (oldVersion < 7) MIGRATIONS_V7.forEach(db::execSQL)
+        if (oldVersion < 8) MIGRATIONS_V8.forEach(db::execSQL)
     }
 
     companion object {
@@ -128,6 +129,36 @@ class DaybookDatabase(context: Context) :
                 updated_at INTEGER NOT NULL
             )
             """.trimIndent(),
+            """
+            CREATE TABLE whatsapp_messages (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender           TEXT    NOT NULL,
+                message          TEXT    NOT NULL,
+                received_at      INTEGER NOT NULL,
+                replied_text     TEXT,
+                replied_at       INTEGER,
+                notification_key TEXT,
+                created_at       INTEGER NOT NULL
+            )
+            """.trimIndent(),
+            """
+            CREATE TABLE kg_nodes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_text TEXT    NOT NULL,
+                source_id   INTEGER NOT NULL,
+                source_type TEXT    NOT NULL,
+                last_seen   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            )
+            """.trimIndent(),
+            """
+            CREATE TABLE kg_edges (
+                from_node INTEGER NOT NULL REFERENCES kg_nodes(id) ON DELETE CASCADE,
+                to_node   INTEGER NOT NULL REFERENCES kg_nodes(id) ON DELETE CASCADE,
+                relation  TEXT    NOT NULL,
+                weight    REAL    NOT NULL DEFAULT 1.0,
+                PRIMARY KEY (from_node, to_node, relation)
+            )
+            """.trimIndent(),
             "CREATE INDEX idx_tasks_status ON tasks(status)",
             "CREATE INDEX idx_tasks_due_date ON tasks(due_date)",
             "CREATE INDEX idx_tasks_meeting_id ON tasks(meeting_id)",
@@ -136,6 +167,10 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX idx_meetings_day ON meetings(day)",
             "CREATE INDEX idx_meetings_next_touch ON meetings(next_touch)",
             "CREATE INDEX idx_passes_category ON passes(category)",
+            "CREATE INDEX idx_whatsapp_sender ON whatsapp_messages(sender)",
+            "CREATE INDEX idx_whatsapp_received ON whatsapp_messages(received_at)",
+            "CREATE INDEX idx_kg_edges_from ON kg_edges(from_node)",
+            "CREATE INDEX idx_kg_edges_to   ON kg_edges(to_node)",
         )
 
         // Ã¢â€â‚¬Ã¢â€â‚¬ Incremental migrations (applied in onUpgrade) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬

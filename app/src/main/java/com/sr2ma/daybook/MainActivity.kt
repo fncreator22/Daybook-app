@@ -70,6 +70,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshToday()
+        // Refresh WhatsApp messages so the Today screen shows any notifications
+        // that arrived while Daybook was in the background.
+        viewModel.loadRecentWhatsAppMessages()
     }
 
     // ── Share Intent ─────────────────────────────────────────────────────────
