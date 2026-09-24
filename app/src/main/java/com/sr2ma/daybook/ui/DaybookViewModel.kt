@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.data.BackupCodec
+import com.sr2ma.daybook.data.DaybookDatabase
 import com.sr2ma.daybook.data.DaybookRepository
 import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.LogQuery
@@ -393,6 +394,8 @@ class DaybookViewModel(
                 lastConversationParseResult = null,
             )
         }
+        // Reset in-RAM session state (rate limit, dedup) for the next session.
+        com.sr2ma.daybook.domain.ConversationSession.clear()
         if (session.isNotEmpty()) {
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
@@ -403,6 +406,43 @@ class DaybookViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Deletes all rows from `conversation_summaries`.
+     * Called from Settings → "Clear conversation memory".
+     *
+     * The in-RAM [ConversationSession] is also reset so any running session
+     * starts fresh. Only the persisted signal is deleted — no user content
+     * (chat text) is ever on disk, so there is nothing else to erase.
+     */
+    fun clearConversationHistory() {
+        com.sr2ma.daybook.domain.ConversationSession.clear()
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                com.sr2ma.daybook.data.dao.ConversationDao(repository.database).deleteAll()
+            }
+        }
+        update { it.copy(message = nextMessage(R.string.ai_memory_cleared)) }
+    }
+
+    /**
+     * Deletes all rows from `user_preferences`.
+     * Called from Settings → "Reset learned preferences".
+     *
+     * Preferences are soft signals (e.g. preferred meeting time, common
+     * project names) extracted from conversation sessions. Resetting them
+     * lets the agent start learning from scratch.
+     */
+    fun resetLearnedPreferences() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                repository.database.writableDatabase.delete(
+                    DaybookDatabase.TABLE_USER_PREFERENCES, null, null,
+                )
+            }
+        }
+        update { it.copy(message = nextMessage(R.string.ai_preferences_reset)) }
     }
 
     /**
@@ -421,11 +461,37 @@ class DaybookViewModel(
      */
     fun sendConversationMessage(text: String) {
         if (text.isBlank()) return
-        val safText = text.take(500)
+        val safText = text.take(com.sr2ma.daybook.domain.ConversationSession.MAX_INPUT_CHARS)
         val userMsg = com.sr2ma.daybook.domain.ConversationMessage(
             text = safText,
             isUser = true,
         )
+
+        // ── Stage 5 guardrails ──────────────────────────────────────────────
+        // ConversationSession enforces: 5 msgs/10s rate limit, 60s dedup,
+        // 20-msg hard cap. If add() returns false, surface feedback and stop.
+        if (!com.sr2ma.daybook.domain.ConversationSession.add(userMsg)) {
+            val guardMsg = when {
+                com.sr2ma.daybook.domain.ConversationSession.isRateLimited() ->
+                    com.sr2ma.daybook.domain.ConversationMessage(
+                        text = "Slow down — give me a moment to catch up.",
+                        isUser = false,
+                    )
+                _state.value.conversationMessages.size >=
+                    com.sr2ma.daybook.domain.ConversationSession.MAX_MESSAGES ->
+                    com.sr2ma.daybook.domain.ConversationMessage(
+                        text = "This conversation is getting long. Close and start a new one.",
+                        isUser = false,
+                        suggestions = listOf("Dismiss"),
+                    )
+                else ->
+                    // Duplicate text within 60 s — silently ignore (no message)
+                    return
+            }
+            update { it.copy(conversationMessages = it.conversationMessages + guardMsg) }
+            return
+        }
+
         update {
             it.copy(
                 conversationMessages = it.conversationMessages + userMsg,

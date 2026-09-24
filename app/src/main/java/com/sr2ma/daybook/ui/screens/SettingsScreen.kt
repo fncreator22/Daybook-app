@@ -61,6 +61,8 @@ fun SettingsScreen(
 ) {
     var askImportMode by remember { mutableStateOf(false) }
     var askDeleteAll by remember { mutableStateOf(false) }
+    var askClearMemory by remember { mutableStateOf(false) }
+    var askResetPrefs by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
@@ -109,6 +111,49 @@ fun SettingsScreen(
 
             // ── Phase 7: WhatsApp Notification Reader ─────────────────────────
             WhatsAppSettingsSection()
+
+            // ── On-device AI (Stage 5) ──────────────────────────────────────
+            SectionHeader(
+                title = stringResource(R.string.settings_section_ai),
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            DaybookCard {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Text(
+                        text = if (state.llmModelReady)
+                            stringResource(R.string.settings_ai_model_status_ready)
+                        else
+                            stringResource(R.string.settings_ai_model_status_missing),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_ai_model_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.settings_ai_attribution),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            ActionRow(
+                icon = R.drawable.ic_delete,
+                title = stringResource(R.string.settings_ai_clear_memory),
+                body = stringResource(R.string.settings_ai_clear_memory_body),
+                enabled = !state.busy,
+                onClick = { askClearMemory = true },
+            )
+            ActionRow(
+                icon = R.drawable.ic_delete,
+                title = stringResource(R.string.settings_ai_reset_prefs),
+                body = stringResource(R.string.settings_ai_reset_prefs_body),
+                enabled = !state.busy,
+                onClick = { askResetPrefs = true },
+            )
 
             SectionHeader(
                 title = stringResource(R.string.settings_section_data),
@@ -173,6 +218,34 @@ fun SettingsScreen(
                 viewModel.deleteEverything()
             },
             onDismiss = { askDeleteAll = false },
+        )
+    }
+
+    if (askClearMemory) {
+        ConfirmDialog(
+            title = stringResource(R.string.settings_ai_clear_memory_confirm_title),
+            body = stringResource(R.string.settings_ai_clear_memory_confirm_body),
+            confirmLabel = stringResource(R.string.action_delete),
+            destructive = true,
+            onConfirm = {
+                askClearMemory = false
+                viewModel.clearConversationHistory()
+            },
+            onDismiss = { askClearMemory = false },
+        )
+    }
+
+    if (askResetPrefs) {
+        ConfirmDialog(
+            title = stringResource(R.string.settings_ai_reset_prefs_confirm_title),
+            body = stringResource(R.string.settings_ai_reset_prefs_confirm_body),
+            confirmLabel = stringResource(R.string.action_delete),
+            destructive = false,
+            onConfirm = {
+                askResetPrefs = false
+                viewModel.resetLearnedPreferences()
+            },
+            onDismiss = { askResetPrefs = false },
         )
     }
 }

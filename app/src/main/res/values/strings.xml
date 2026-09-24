@@ -300,7 +300,27 @@
     <string name="auth_signed_in_as">Signed in as %1$s</string>
     <string name="auth_error_generic">Sign-in failed. Try again.</string>
 
+    <!-- On-device AI settings (Stage 5) -->
+    <string name="settings_section_ai">On-device AI</string>
+    <string name="settings_ai_model_status_ready">Gemma 270M model is ready</string>
+    <string name="settings_ai_model_status_missing">AI model not downloaded</string>
+    <string name="settings_ai_model_body">Powers smart conversation replies. Download once, runs fully offline.</string>
+    <string name="settings_ai_clear_memory">Clear conversation memory</string>
+    <string name="settings_ai_clear_memory_body">Removes stored conversation summaries. The agent will start fresh.</string>
+    <string name="settings_ai_clear_memory_confirm_title">Clear conversation memory?</string>
+    <string name="settings_ai_clear_memory_confirm_body">Daybook will forget all conversation summaries. This cannot be undone.</string>
+    <string name="settings_ai_reset_prefs">Reset learned preferences</string>
+    <string name="settings_ai_reset_prefs_body">Clears preferences the agent learned from your conversations.</string>
+    <string name="settings_ai_reset_prefs_confirm_title">Reset learned preferences?</string>
+    <string name="settings_ai_reset_prefs_confirm_body">The agent will re-learn your preferences from future conversations.</string>
+    <string name="settings_ai_attribution">Gemma 270M by Google DeepMind — gemma.google.com/terms</string>
+
+    <!-- AI action feedback snackbars -->
+    <string name="ai_memory_cleared">Conversation memory cleared</string>
+    <string name="ai_preferences_reset">Learned preferences reset</string>
+
 </resources>
+
 
 
 
