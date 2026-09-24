@@ -79,7 +79,7 @@ object KnowledgeGraphEngine {
 
         wdb.execSQL(
             "INSERT INTO kg_nodes (entity_text, source_id, source_type, last_seen) VALUES (?, ?, ?, ?)",
-            arrayOf(entityText, sourceId, sourceType, nowSec),
+            arrayOf<Any?>(entityText, sourceId, sourceType, nowSec),
         )
         val cursor = wdb.rawQuery("SELECT last_insert_rowid()", null)
         val newId = if (cursor.moveToFirst()) cursor.getLong(0) else -1L
@@ -108,12 +108,12 @@ object KnowledgeGraphEngine {
             val newWeight = 0.8 * oldWeight + 0.2 * weight  // EMA
             wdb.execSQL(
                 "UPDATE kg_edges SET weight = ? WHERE from_node = ? AND to_node = ? AND relation = ?",
-                arrayOf(newWeight, fromNode, toNode, relation),
+                arrayOf<Any?>(newWeight, fromNode, toNode, relation),
             )
         } else {
             wdb.execSQL(
                 "INSERT INTO kg_edges (from_node, to_node, relation, weight) VALUES (?, ?, ?, ?)",
-                arrayOf(fromNode, toNode, relation, weight),
+                arrayOf<Any?>(fromNode, toNode, relation, weight),
             )
         }
         existing.close()
