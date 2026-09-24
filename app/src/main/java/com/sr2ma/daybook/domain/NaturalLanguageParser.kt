@@ -96,9 +96,9 @@ object NaturalLanguageParser {
     private fun parseMeeting(original: String, lower: String, reference: LocalDate): ParseResult {
         val withIdx = lower.indexOf(" with ")
         val attendees = if (withIdx != -1) {
-            // Grab everything after "with" and stop at "at / on / @" (time/day marker) or end
+            // Grab everything after "with" and stop at "tomorrow / today / at / on / @" (time/day marker) or end
             original.substring(withIdx + 6)
-                .split(Regex("\\bat\\b|\\bon\\b|@|,", RegexOption.IGNORE_CASE))
+                .split(Regex("\\btomorrow\\b|\\btoday\\b|\\bat\\b|\\bon\\b|@|,", RegexOption.IGNORE_CASE))
                 .first()
                 .split(",")
                 .map { it.trim() }

@@ -78,7 +78,7 @@ class NaturalLanguageParserTest {
     // ── Log entry capture ─────────────────────────────────────────────────────
 
     @Test
-    fun `note: prefix routes to CREATE_LOG with NOTE kind`() {
+    fun `note prefix routes to CREATE_LOG with NOTE kind`() {
         val result = NaturalLanguageParser.parse("note: discussed pricing with the team")
 
         assertEquals(ParsedIntent.CREATE_LOG, result.intent)
@@ -103,7 +103,7 @@ class NaturalLanguageParserTest {
     }
 
     @Test
-    fun `win: prefix routes to CREATE_LOG with WIN kind`() {
+    fun `win prefix routes to CREATE_LOG with WIN kind`() {
         val result = NaturalLanguageParser.parse("win: closed the enterprise deal")
 
         assertEquals(ParsedIntent.CREATE_LOG, result.intent)

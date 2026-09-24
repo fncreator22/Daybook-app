@@ -30,6 +30,8 @@ class SyncViewModel(
     private fun loadState(): SyncUiState {
         val prefs = syncManager.syncPrefs
         return SyncUiState(
+            userName = prefs.userName,
+            onboardingCompleted = prefs.onboardingCompleted,
             isSignedIn = prefs.isSignedIn,
             accountEmail = prefs.accountEmail,
             calendarSyncMeetings = prefs.calendarSyncMeetings,
@@ -47,6 +49,31 @@ class SyncViewModel(
 
     private fun refreshState() {
         _state.value = loadState()
+    }
+
+    // ── User Profile & Onboarding ─────────────────────────────────────────────
+
+    fun setUserName(name: String) {
+        val trimmed = name.trim()
+        val finalName = trimmed.ifBlank { null }
+        syncManager.syncPrefs.userName = finalName
+        _state.value = _state.value.copy(userName = finalName)
+    }
+
+    fun completeOnboarding(name: String) {
+        val trimmed = name.trim()
+        val finalName = trimmed.ifBlank { null }
+        syncManager.syncPrefs.userName = finalName
+        syncManager.syncPrefs.onboardingCompleted = true
+        _state.value = _state.value.copy(
+            userName = finalName,
+            onboardingCompleted = true,
+        )
+    }
+
+    fun resetOnboarding() {
+        syncManager.syncPrefs.onboardingCompleted = false
+        _state.value = _state.value.copy(onboardingCompleted = false)
     }
 
     // ── Autonomy level control (§8) ───────────────────────────────────────────
@@ -220,6 +247,8 @@ class SyncViewModel(
 
 /** UI state for the sync settings section. */
 data class SyncUiState(
+    val userName: String? = null,
+    val onboardingCompleted: Boolean = false,
     val isSignedIn: Boolean = false,
     val accountEmail: String? = null,
     val calendarSyncMeetings: Boolean = false,

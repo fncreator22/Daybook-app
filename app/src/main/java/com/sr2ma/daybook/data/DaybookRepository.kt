@@ -41,6 +41,9 @@ class DaybookRepository(internal val database: DaybookDatabase) {
     private val logDao = LogDao(database)
     private val meetingDao = MeetingDao(database)
     private val passDao = PassDao(database)
+    private val whatsAppDao = com.sr2ma.daybook.data.dao.WhatsAppDao(database)
+    private val gmailDao = com.sr2ma.daybook.data.dao.GmailDao(database)
+    private val conversationDao = com.sr2ma.daybook.data.dao.ConversationDao(database)
 
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
@@ -179,6 +182,10 @@ class DaybookRepository(internal val database: DaybookDatabase) {
             taskDao.deleteAll()
             logDao.deleteAll()
             meetingDao.deleteAll()
+            passDao.deleteAll()
+            whatsAppDao.deleteAll()
+            gmailDao.deleteAll()
+            conversationDao.deleteAll()
         }
         refreshAll()
     }
@@ -201,6 +208,10 @@ class DaybookRepository(internal val database: DaybookDatabase) {
                 taskDao.deleteAll()
                 logDao.deleteAll()
                 meetingDao.deleteAll()
+                passDao.deleteAll()
+                whatsAppDao.deleteAll()
+                gmailDao.deleteAll()
+                conversationDao.deleteAll()
             }
 
             val remappedMeetingIds = HashMap<Long, Long>(snapshot.meetings.size)

@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.ui.screens
+package com.sr2ma.daybook.ui.screens
 
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
@@ -81,6 +81,7 @@ import kotlinx.coroutines.delay
 fun TodayScreen(
     state: DaybookUiState,
     viewModel: DaybookViewModel,
+    userName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val board = state.board
@@ -93,7 +94,11 @@ fun TodayScreen(
         modifier = modifier.fillMaxSize(),
     ) {
         item(key = "day-header") {
-            DayHeader(today = state.today, completedToday = board.completedToday)
+            DayHeader(
+                today = state.today,
+                completedToday = board.completedToday,
+                userName = userName,
+            )
         }
         item(key = "quick-add") {
             QuickAddField(onAdd = viewModel::quickAddTask)
@@ -319,14 +324,29 @@ private fun <T> LazyListScope.boardSection(
 
 /** The date, written out, with a quiet tally of what has already been finished. */
 @Composable
-private fun DayHeader(today: LocalDate, completedToday: Int) {
+private fun DayHeader(
+    today: LocalDate,
+    completedToday: Int,
+    userName: String? = null,
+) {
     GlassCard(
         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
         animatedSheen = true,
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            val greeting = if (userName != null) {
+                val hour = java.time.LocalTime.now().hour
+                val prefix = when (hour) {
+                    in 5..11 -> "Good morning"
+                    in 12..16 -> "Good afternoon"
+                    else -> "Good evening"
+                }
+                "$prefix, $userName"
+            } else {
+                Dates.weekdayLong(today)
+            }
             Text(
-                text = Dates.weekdayLong(today),
+                text = greeting,
                 style = MaterialTheme.typography.headlineSmall,
             )
             Row(
@@ -335,7 +355,7 @@ private fun DayHeader(today: LocalDate, completedToday: Int) {
                 modifier = Modifier.padding(top = 4.dp),
             ) {
                 Text(
-                    text = Dates.shortLabel(today, today),
+                    text = if (userName != null) "${Dates.weekdayLong(today)} \u2014 ${Dates.shortLabel(today, today)}" else Dates.shortLabel(today, today),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

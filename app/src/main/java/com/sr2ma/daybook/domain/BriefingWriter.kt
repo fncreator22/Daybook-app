@@ -14,7 +14,7 @@ object BriefingWriter {
 
     fun write(board: TodayBoard): String {
         if (board.isEmpty && board.completedToday == 0) {
-            return "Your day is clear. Nothing overdue, no meetings, no follow-ups."
+            return "Your day is clear. Nothing on your agenda, no meetings, no follow-ups."
         }
 
         val parts = mutableListOf<String>()

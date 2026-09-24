@@ -1,7 +1,11 @@
 package com.sr2ma.daybook.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,26 +15,33 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.BuildConfig
 import com.sr2ma.daybook.R
@@ -64,6 +75,18 @@ fun SettingsScreen(
     var askDeleteAll by remember { mutableStateOf(false) }
     var askClearMemory by remember { mutableStateOf(false) }
     var askResetPrefs by remember { mutableStateOf(false) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val syncState by syncViewModel.state.collectAsState()
+
+    val modelPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importModelFile(uri, context.contentResolver)
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
@@ -85,6 +108,57 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
+            // ── Profile ────────────────────────────────────────────────────────
+            SectionHeader(
+                title = stringResource(R.string.settings_profile_section),
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            DaybookCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val initial = (syncState.userName?.take(1) ?: syncState.accountEmail?.take(1) ?: "D").uppercase()
+                        Text(
+                            text = initial,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = syncState.userName ?: "User",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = if (syncState.isSignedIn && syncState.accountEmail != null)
+                                syncState.accountEmail!!
+                            else
+                                stringResource(R.string.settings_profile_offline),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { showEditNameDialog = true }) {
+                        Text(stringResource(R.string.settings_profile_edit_name))
+                    }
+                }
+            }
+
             SectionHeader(
                 title = stringResource(R.string.settings_section_backup),
                 // SectionHeader carries no inset of its own, so a heading that
@@ -177,14 +251,46 @@ fun SettingsScreen(
                         enabled = !state.busy,
                         onClick = { viewModel.downloadModel() },
                     )
+                    ActionRow(
+                        icon = R.drawable.ic_import,
+                        title = stringResource(R.string.settings_ai_import_model),
+                        body = stringResource(R.string.settings_ai_import_model_body),
+                        enabled = !state.busy,
+                        onClick = { modelPickerLauncher.launch(arrayOf("*/*")) },
+                    )
                 }
 
-                // Surface download errors as a snackbar via the existing message channel
+                // Surface download / import errors in an informative card with Dismiss button
                 val downloadError = state.modelDownloadError
                 if (downloadError != null) {
-                    LaunchedEffect(downloadError) {
-                        // The error is shown via the main snackbar; clear it after showing
-                        viewModel.dismissModelDownloadError()
+                    Spacer(Modifier.height(8.dp))
+                    DaybookCard {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                        ) {
+                            Text(
+                                text = "Model Notice",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Text(
+                                text = downloadError,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                TextButton(onClick = { viewModel.dismissModelDownloadError() }) {
+                                    Text("Dismiss")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -213,6 +319,7 @@ fun SettingsScreen(
                     StatRow(stringResource(R.string.settings_stat_tasks), state.taskCount)
                     StatRow(stringResource(R.string.settings_stat_log_entries), state.logCount)
                     StatRow(stringResource(R.string.settings_stat_meetings), state.meetingCount)
+                    StatRow(stringResource(R.string.settings_stat_passes), state.passes.size)
                 }
             }
             ActionRow(
@@ -295,6 +402,36 @@ fun SettingsScreen(
                 viewModel.resetLearnedPreferences()
             },
             onDismiss = { askResetPrefs = false },
+        )
+    }
+
+    if (showEditNameDialog) {
+        var tempName by remember { mutableStateOf(syncState.userName ?: "") }
+        AlertDialog(
+            onDismissRequest = { showEditNameDialog = false },
+            title = { Text(stringResource(R.string.settings_profile_edit_name)) },
+            text = {
+                OutlinedTextField(
+                    value = tempName,
+                    onValueChange = { tempName = it },
+                    label = { Text(stringResource(R.string.onboarding_name_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    syncViewModel.setUserName(tempName)
+                    showEditNameDialog = false
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNameDialog = false }) {
+                    Text("Cancel")
+                }
+            },
         )
     }
 }

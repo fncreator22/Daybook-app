@@ -97,9 +97,21 @@ private val IMPORT_MIME_TYPES = arrayOf(
 @Composable
 fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
     val state by viewModel.state.collectAsState()
+    val syncState by syncViewModel.state.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val stateHolder = rememberSaveableStateHolder()
+
+    // ── Onboarding Gate ───────────────────────────────────────────────────────
+    if (!syncState.onboardingCompleted) {
+        com.sr2ma.daybook.ui.screens.OnboardingScreen(
+            syncViewModel = syncViewModel,
+            onCompleted = { name ->
+                syncViewModel.completeOnboarding(name)
+            },
+        )
+        return
+    }
 
     // Which import mode the picker was opened for. It is held here because the
     // choice is made in a dialog before the picker opens and is needed again in
@@ -154,7 +166,6 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
         }
     }
 
-    val syncState by syncViewModel.state.collectAsState()
     val syncErrorMessage = syncState.errorMessage
     LaunchedEffect(syncErrorMessage) {
         if (syncErrorMessage != null) {
@@ -282,7 +293,7 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
                 // state -- which is what rememberLazyListState uses -- keyed by tab.
                 stateHolder.SaveableStateProvider(state.tab.name) {
                     when (state.tab) {
-                        DaybookTab.TODAY -> TodayScreen(state, viewModel, content)
+                        DaybookTab.TODAY -> TodayScreen(state, viewModel, userName = syncState.userName, modifier = content)
                         DaybookTab.TASKS -> TasksScreen(state, viewModel, content)
                         DaybookTab.LOG -> LogScreen(state, viewModel, content)
                         DaybookTab.MEETINGS -> MeetingsScreen(state, viewModel, content)

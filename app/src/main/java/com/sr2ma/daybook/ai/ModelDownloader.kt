@@ -76,22 +76,43 @@ class ModelDownloader(private val context: Context) {
         // ── 3. Clean up any previous partial download ─────────────────────────
         tmpFile.delete()
 
-        // ── 4. Download → tmp ─────────────────────────────────────────────────
+        // ── 4. Download → tmp (following redirects up to 8 hops) ─────────────
         try {
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 15_000
-                readTimeout = 60_000
-                setRequestProperty("User-Agent", "Daybook-ModelDownloader/1.0")
+            var currentUrl = url
+            var connection: HttpURLConnection? = null
+            var redirects = 0
+            val maxRedirects = 8
+            var total = -1L
+
+            while (true) {
+                val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    connectTimeout = 30_000
+                    readTimeout = 60_000
+                    setRequestProperty("User-Agent", "Daybook-ModelDownloader/1.0")
+                }
+                val code = conn.responseCode
+                if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER, 307, 308)) {
+                    val location = conn.getHeaderField("Location")
+                        ?: return@withContext DownloadResult.Failure("Redirected without Location header")
+                    currentUrl = if (location.startsWith("http")) location else URL(URL(currentUrl), location).toString()
+                    conn.disconnect()
+                    redirects++
+                    if (redirects > maxRedirects) {
+                        return@withContext DownloadResult.Failure("Too many redirects ($redirects)")
+                    }
+                    continue
+                }
+                if (code != HttpURLConnection.HTTP_OK) {
+                    return@withContext DownloadResult.Failure("Server returned HTTP $code")
+                }
+                connection = conn
+                total = conn.contentLengthLong
+                break
             }
-            connection.connect()
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                return@withContext DownloadResult.Failure(
-                    "Server returned HTTP ${connection.responseCode}",
-                )
-            }
-            val total = connection.contentLengthLong
-            connection.inputStream.use { input ->
+
+            connection!!.inputStream.use { input ->
                 tmpFile.outputStream().use { output ->
                     val buf = ByteArray(DEFAULT_BUFFER_SIZE)
                     var downloaded = 0L
@@ -103,6 +124,7 @@ class ModelDownloader(private val context: Context) {
                     }
                 }
             }
+            connection.disconnect()
         } catch (e: Exception) {
             tmpFile.delete()
             return@withContext DownloadResult.Failure("Download failed: ${e.message}")
@@ -122,6 +144,65 @@ class ModelDownloader(private val context: Context) {
         if (!tmpFile.renameTo(finalFile)) {
             tmpFile.delete()
             return@withContext DownloadResult.Failure("Could not rename model file after download.")
+        }
+
+        DownloadResult.Success(finalFile)
+    }
+
+    /**
+     * Imports a pre-downloaded model file from an [InputStream] (e.g. from Storage Access Framework / file picker).
+     *
+     * Validates free space, copies into `.tmp`, verifies hash, and atomically renames.
+     */
+    suspend fun importModel(
+        inputStream: java.io.InputStream,
+        expectedSha256: String = GEMMA_270M_V1_SHA256,
+        versionTag: String = "v1",
+        onProgress: ProgressListener? = null,
+    ): DownloadResult = withContext(Dispatchers.IO) {
+        val modelDir = context.filesDir
+        val finalFile = File(modelDir, modelFileName(versionTag))
+        val tmpFile = File(modelDir, "${modelFileName(versionTag)}.tmp")
+
+        val freeBytes = modelDir.freeSpace
+        if (freeBytes < MIN_FREE_BYTES) {
+            return@withContext DownloadResult.Failure(
+                "Not enough storage: need at least 250 MB free, only ${freeBytes / MB}MB available."
+            )
+        }
+
+        tmpFile.delete()
+
+        try {
+            inputStream.use { input ->
+                tmpFile.outputStream().use { output ->
+                    val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var copied = 0L
+                    var read: Int
+                    while (input.read(buf).also { read = it } != -1) {
+                        output.write(buf, 0, read)
+                        copied += read
+                        onProgress?.onProgress(copied, -1L)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            tmpFile.delete()
+            return@withContext DownloadResult.Failure("Import failed: ${e.message}")
+        }
+
+        // SHA-256 verification
+        val actualHash = sha256(tmpFile)
+        if (actualHash != expectedSha256.lowercase()) {
+            tmpFile.delete()
+            return@withContext DownloadResult.Failure(
+                "SHA-256 mismatch — file is corrupted or not a valid Gemma 3 270M model."
+            )
+        }
+
+        if (!tmpFile.renameTo(finalFile)) {
+            tmpFile.delete()
+            return@withContext DownloadResult.Failure("Could not rename model file after import.")
         }
 
         DownloadResult.Success(finalFile)

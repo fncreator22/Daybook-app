@@ -28,7 +28,15 @@ class SyncPreferences(context: Context) {
         )
     }
 
-    // ── Account ──────────────────────────────────────────────────────────────
+    // ── Account & User Profile ───────────────────────────────────────────────
+
+    var userName: String?
+        get() = prefs.getString(KEY_USER_NAME, null)
+        set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
+
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, value).apply()
 
     var accountEmail: String?
         get() = prefs.getString(KEY_ACCOUNT_EMAIL, null)
@@ -120,6 +128,8 @@ class SyncPreferences(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "daybook_sync_prefs"
+        private const val KEY_USER_NAME = "user_name"
+        private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_ACCOUNT_EMAIL = "account_email"
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"

@@ -273,7 +273,28 @@
 
     <!-- Google OAuth client ID for Calendar + Drive sync (replace with real value from Google Cloud Console) -->
     <string name="google_server_client_id" translatable="false">497669705796-8psoqme4n5o6o3p7tp9nlscuur2g5vhl.apps.googleusercontent.com</string>
-    <bool name="google_auth_placeholder">true</bool>
+    <bool name="google_auth_placeholder">false</bool>
+
+    <!-- Onboarding & Profile -->
+    <string name="onboarding_welcome_title">Welcome to Daybook</string>
+    <string name="onboarding_welcome_subtitle">100% Offline-First Personal Productivity &amp; On-Device AI</string>
+    <string name="onboarding_private_title">100% Private &amp; Local</string>
+    <string name="onboarding_private_desc">All your tasks, logs, meetings, and passes stay securely encrypted on your device.</string>
+    <string name="onboarding_ai_title">On-Device Intelligence</string>
+    <string name="onboarding_ai_desc">Autonomous agent powered locally by Gemma 3. No cloud subscriptions required.</string>
+    <string name="onboarding_sync_title">Optional Cloud Sync</string>
+    <string name="onboarding_sync_desc">Optionally connect Google Calendar &amp; Google Drive backups whenever you are ready.</string>
+    <string name="onboarding_profile_title">Profile Setup</string>
+    <string name="onboarding_name_label">Your name</string>
+    <string name="onboarding_name_hint">What should Daybook call you?</string>
+    <string name="onboarding_get_started">Get Started</string>
+    <string name="onboarding_continue_offline">Continue Offline</string>
+    <string name="settings_profile_section">Profile</string>
+    <string name="settings_profile_offline">Offline Mode (Local Only)</string>
+    <string name="settings_profile_edit_name">Edit Name</string>
+    <string name="settings_ai_import_model">Import model file (.litertlm)</string>
+    <string name="settings_ai_import_model_body">Select gemma3-270m-it-q8.litertlm from your device storage</string>
+    <string name="settings_stat_passes">Passes &amp; cards</string>
 
     <!-- Wallet: Add to Wallet bottom sheet (Session 9) -->
     <string name="wallet_add_title">Add to Wallet</string>

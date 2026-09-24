@@ -547,6 +547,57 @@ class DaybookViewModel(
         }
     }
 
+    /**
+     * Imports a user-selected model file (.litertlm) into app-scoped internal storage.
+     */
+    fun importModelFile(uri: android.net.Uri, contentResolver: android.content.ContentResolver) {
+        val downloader = modelDownloader ?: return
+        if (state.value.modelDownloadProgress != null) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            update { it.copy(modelDownloadProgress = 0f, modelDownloadError = null) }
+            val inputStream = try {
+                contentResolver.openInputStream(uri)
+            } catch (e: Exception) {
+                update { it.copy(
+                    modelDownloadProgress = null,
+                    modelDownloadError = "Cannot open selected file: ${e.message}",
+                ) }
+                return@launch
+            }
+            if (inputStream == null) {
+                update { it.copy(
+                    modelDownloadProgress = null,
+                    modelDownloadError = "Selected file could not be read.",
+                ) }
+                return@launch
+            }
+            val result = downloader.importModel(
+                inputStream = inputStream,
+                expectedSha256 = com.sr2ma.daybook.ai.ModelDownloader.GEMMA_270M_V1_SHA256,
+                versionTag = "v1",
+                onProgress = com.sr2ma.daybook.ai.ModelDownloader.ProgressListener { copied, _ ->
+                    val progress = (copied.toFloat() / 304_005_120f).coerceIn(0f, 1f)
+                    update { it.copy(modelDownloadProgress = progress) }
+                },
+            )
+            when (result) {
+                is com.sr2ma.daybook.ai.ModelDownloader.DownloadResult.Success -> {
+                    update { it.copy(
+                        modelDownloadProgress = null,
+                        llmModelReady = true,
+                        message = nextMessage(R.string.ai_model_downloaded),
+                    ) }
+                }
+                is com.sr2ma.daybook.ai.ModelDownloader.DownloadResult.Failure -> {
+                    update { it.copy(
+                        modelDownloadProgress = null,
+                        modelDownloadError = result.reason,
+                    ) }
+                }
+            }
+        }
+    }
+
     /** Clears the model download error after the Settings screen has shown it. */
     fun dismissModelDownloadError() {
         update { it.copy(modelDownloadError = null) }

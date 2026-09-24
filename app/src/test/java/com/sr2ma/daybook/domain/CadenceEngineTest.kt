@@ -37,7 +37,7 @@ class CadenceEngineTest {
     @Test
     fun `completing a weekly task produces a new OPEN instance due 7 days from original`() {
         val completed = weeklyTask(dueDate = today)
-        val next = CadenceEngine.onTaskCompleted(completed, completedAt = today)
+        val next = CadenceEngine.onTaskCompleted(completed, completedAt = today)!!
 
         assertEquals(TaskStatus.OPEN, next.status)
         assertEquals(today.plusDays(7), next.dueDate)
@@ -47,7 +47,7 @@ class CadenceEngineTest {
     @Test
     fun `completing a daily task produces a next instance due 1 day from original`() {
         val task = weeklyTask(dueDate = today).copy(cadence = Cadence.DAILY)
-        val next = CadenceEngine.onTaskCompleted(task, completedAt = today)
+        val next = CadenceEngine.onTaskCompleted(task, completedAt = today)!!
 
         assertEquals(today.plusDays(1), next.dueDate)
     }
@@ -55,7 +55,7 @@ class CadenceEngineTest {
     @Test
     fun `completing a monthly task produces next instance due 1 month from original`() {
         val task = weeklyTask(dueDate = today).copy(cadence = Cadence.MONTHLY)
-        val next = CadenceEngine.onTaskCompleted(task, completedAt = today)
+        val next = CadenceEngine.onTaskCompleted(task, completedAt = today)!!
 
         assertEquals(today.plusMonths(1), next.dueDate)
     }
@@ -63,7 +63,7 @@ class CadenceEngineTest {
     @Test
     fun `completing a yearly task produces next instance due 1 year from original`() {
         val task = weeklyTask(dueDate = today).copy(cadence = Cadence.YEARLY)
-        val next = CadenceEngine.onTaskCompleted(task, completedAt = today)
+        val next = CadenceEngine.onTaskCompleted(task, completedAt = today)!!
 
         assertEquals(today.plusYears(1), next.dueDate)
     }
@@ -75,7 +75,7 @@ class CadenceEngineTest {
         val tuesday = LocalDate.of(2026, 9, 7)
         val task = weeklyTask(dueDate = friday)
 
-        val next = CadenceEngine.onTaskCompleted(task, completedAt = tuesday)
+        val next = CadenceEngine.onTaskCompleted(task, completedAt = tuesday)!!
 
         // Next due = original Friday + 7 = Sep 18, not Sep 14 (Tuesday + 7)
         assertEquals(LocalDate.of(2026, 9, 18), next.dueDate)
@@ -86,49 +86,49 @@ class CadenceEngineTest {
     @Test
     fun `title carries forward`() {
         val task = weeklyTask()
-        val next = CadenceEngine.onTaskCompleted(task, today)
+        val next = CadenceEngine.onTaskCompleted(task, today)!!
         assertEquals("Weekly review", next.title)
     }
 
     @Test
     fun `notes carry forward`() {
         val task = weeklyTask(notes = "Always bring the Q-report")
-        val next = CadenceEngine.onTaskCompleted(task, today)
+        val next = CadenceEngine.onTaskCompleted(task, today)!!
         assertEquals("Always bring the Q-report", next.notes)
     }
 
     @Test
     fun `priority carries forward`() {
         val task = weeklyTask(priority = Priority.HIGH)
-        val next = CadenceEngine.onTaskCompleted(task, today)
+        val next = CadenceEngine.onTaskCompleted(task, today)!!
         assertEquals(Priority.HIGH, next.priority)
     }
 
     @Test
     fun `project carries forward`() {
         val task = weeklyTask(project = "Acme")
-        val next = CadenceEngine.onTaskCompleted(task, today)
+        val next = CadenceEngine.onTaskCompleted(task, today)!!
         assertEquals("Acme", next.project)
     }
 
     @Test
     fun `cadence carries forward`() {
         val task = weeklyTask()
-        val next = CadenceEngine.onTaskCompleted(task, today)
+        val next = CadenceEngine.onTaskCompleted(task, today)!!
         assertEquals(Cadence.WEEKLY, next.cadence)
     }
 
     @Test
     fun `cadence parent id is set to the completed task id`() {
         val task = weeklyTask(id = 42L)
-        val next = CadenceEngine.onTaskCompleted(task, today)
+        val next = CadenceEngine.onTaskCompleted(task, today)!!
         assertEquals(42L, next.cadenceParentId)
     }
 
     @Test
     fun `new instance gets id of 0 for db insertion`() {
         val task = weeklyTask(id = 99L)
-        val next = CadenceEngine.onTaskCompleted(task, today)
+        val next = CadenceEngine.onTaskCompleted(task, today)!!
         assertEquals(0L, next.id)
     }
 
