@@ -272,7 +272,7 @@
     <string name="notif_channel_reminders_desc">Task due dates, overdue alerts, and pass expiry warnings</string>
 
     <!-- Google OAuth client ID for Calendar + Drive sync (replace with real value from Google Cloud Console) -->
-    <string name="google_server_client_id" translatable="false">YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com</string>
+    <string name="google_server_client_id" translatable="false">497669705796-8psoqme4n5o6o3p7tp9nlscuur2g5vhl.apps.googleusercontent.com</string>
     <bool name="google_auth_placeholder">true</bool>
 
     <!-- Wallet: Add to Wallet bottom sheet (Session 9) -->
