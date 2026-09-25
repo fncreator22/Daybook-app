@@ -274,16 +274,17 @@ fun SettingsScreen(
                         enabled = !state.busy,
                         onClick = {
                             val token = syncViewModel.syncManager.syncPrefs.huggingFaceToken
-                            viewModel.downloadModel(token = token)
+                            val customUrl = syncViewModel.syncManager.syncPrefs.customModelUrl
+                            viewModel.downloadModel(token = token, customUrl = customUrl)
                         },
                     )
                     ActionRow(
                         icon = R.drawable.ic_settings,
-                        title = "Hugging Face API Token",
-                        body = if (syncViewModel.syncManager.syncPrefs.huggingFaceToken != null)
-                            "Token configured (required for gated Gemma download)"
+                        title = "Model Download Settings & Token",
+                        body = if (syncViewModel.syncManager.syncPrefs.huggingFaceToken != null || syncViewModel.syncManager.syncPrefs.customModelUrl != null)
+                            "Configured (HF token or custom mirror set)"
                         else
-                            "Optional — tap to enter free HF token for gated model download",
+                            "Optional — tap to enter HF token or direct mirror URL",
                         enabled = !state.busy,
                         onClick = { showHfTokenDialog = true },
                     )
@@ -491,21 +492,32 @@ fun SettingsScreen(
         var tokenInput by remember {
             mutableStateOf(syncViewModel.syncManager.syncPrefs.huggingFaceToken ?: "")
         }
+        var urlInput by remember {
+            mutableStateOf(syncViewModel.syncManager.syncPrefs.customModelUrl ?: "")
+        }
         AlertDialog(
             onDismissRequest = { showHfTokenDialog = false },
-            title = { Text("Hugging Face API Token") },
+            title = { Text("Model Download Configuration") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Gemma 3 270M is a gated model on Hugging Face. Enter your free User Access Token (from huggingface.co/settings/tokens) with Gemma license accepted.",
+                        text = "Gemma 3 270M is gated on Hugging Face. You can enter your free HF token or supply a custom mirror / CDN URL.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedTextField(
                         value = tokenInput,
                         onValueChange = { tokenInput = it },
-                        label = { Text("Token (hf_...)") },
+                        label = { Text("Hugging Face Token (hf_...)") },
                         placeholder = { Text("hf_xxxxxxxxxxxxxxxx") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = urlInput,
+                        onValueChange = { urlInput = it },
+                        label = { Text("Custom Mirror URL (optional)") },
+                        placeholder = { Text("https://mirror.example.com/gemma3.litertlm") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -513,19 +525,24 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val clean = tokenInput.trim().ifBlank { null }
-                    syncViewModel.syncManager.syncPrefs.huggingFaceToken = clean
+                    val cleanToken = tokenInput.trim().ifBlank { null }
+                    val cleanUrl = urlInput.trim().ifBlank { null }
+                    syncViewModel.syncManager.syncPrefs.huggingFaceToken = cleanToken
+                    syncViewModel.syncManager.syncPrefs.customModelUrl = cleanUrl
                     showHfTokenDialog = false
                 }) {
-                    Text("Save Token")
+                    Text("Save Settings")
                 }
             },
             dismissButton = {
                 Row {
-                    if (!syncViewModel.syncManager.syncPrefs.huggingFaceToken.isNullOrBlank()) {
+                    if (!syncViewModel.syncManager.syncPrefs.huggingFaceToken.isNullOrBlank() ||
+                        !syncViewModel.syncManager.syncPrefs.customModelUrl.isNullOrBlank()) {
                         TextButton(onClick = {
                             syncViewModel.syncManager.syncPrefs.huggingFaceToken = null
+                            syncViewModel.syncManager.syncPrefs.customModelUrl = null
                             tokenInput = ""
+                            urlInput = ""
                             showHfTokenDialog = false
                         }) {
                             Text("Clear", color = MaterialTheme.colorScheme.error)

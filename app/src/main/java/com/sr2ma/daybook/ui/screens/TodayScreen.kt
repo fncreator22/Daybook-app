@@ -50,7 +50,9 @@ import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.model.LogEntry
+import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.domain.model.Pass
+import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.WhatsAppMessage
 import com.sr2ma.daybook.ui.DaybookUiState
 import com.sr2ma.daybook.ui.DaybookViewModel
@@ -99,6 +101,8 @@ fun TodayScreen(
 ) {
     val board = state.board
     var viewingPass by remember { mutableStateOf<Pass?>(null) }
+    var viewingMeeting by remember { mutableStateOf<Meeting?>(null) }
+    var viewingTask by remember { mutableStateOf<Task?>(null) }
     var showConnectivityDialog by remember { mutableStateOf(false) }
 
     if (showConnectivityDialog) {
@@ -122,6 +126,36 @@ fun TodayScreen(
                 viewModel.deletePass(passToDelete)
             },
             onDismiss = { viewingPass = null },
+        )
+    }
+
+    viewingMeeting?.let { meeting ->
+        MeetingCardSheet(
+            meeting = meeting,
+            today = state.today,
+            onEdit = { meetingToEdit ->
+                viewingMeeting = null
+                viewModel.editMeeting(meetingToEdit)
+            },
+            onToggleFollowUp = { meetingToToggle ->
+                viewModel.toggleFollowUpDone(meetingToToggle)
+            },
+            onDismiss = { viewingMeeting = null },
+        )
+    }
+
+    viewingTask?.let { task ->
+        TaskCardSheet(
+            task = task,
+            today = state.today,
+            onEdit = { taskToEdit ->
+                viewingTask = null
+                viewModel.editTask(taskToEdit)
+            },
+            onToggleDone = { taskToToggle ->
+                viewModel.toggleTaskDone(taskToToggle)
+            },
+            onDismiss = { viewingTask = null },
         )
     }
 
@@ -349,7 +383,7 @@ fun TodayScreen(
                     task = task,
                     today = state.today,
                     onToggleDone = { viewModel.toggleTaskDone(task) },
-                    onClick = { viewModel.editTask(task) },
+                    onClick = { viewingTask = task },
                 )
             }
             boardSection(
@@ -362,7 +396,7 @@ fun TodayScreen(
                     task = task,
                     today = state.today,
                     onToggleDone = { viewModel.toggleTaskDone(task) },
-                    onClick = { viewModel.editTask(task) },
+                    onClick = { viewingTask = task },
                 )
             }
             boardSection(
@@ -375,7 +409,7 @@ fun TodayScreen(
                     task = task,
                     today = state.today,
                     onToggleDone = { viewModel.toggleTaskDone(task) },
-                    onClick = { viewModel.editTask(task) },
+                    onClick = { viewingTask = task },
                 )
             }
             boardSection(
@@ -388,7 +422,7 @@ fun TodayScreen(
                     task = task,
                     today = state.today,
                     onToggleDone = { viewModel.toggleTaskDone(task) },
-                    onClick = { viewModel.editTask(task) },
+                    onClick = { viewingTask = task },
                 )
             }
             boardSection(
@@ -400,7 +434,7 @@ fun TodayScreen(
                 MeetingRow(
                     meeting = meeting,
                     today = state.today,
-                    onClick = { viewModel.editMeeting(meeting) },
+                    onClick = { viewingMeeting = meeting },
                     onToggleFollowUp = { viewModel.toggleFollowUpDone(meeting) },
                     // Every meeting in this section is today's by definition, so a
                     // "Today" chip on each row would say nothing.
@@ -416,7 +450,7 @@ fun TodayScreen(
                 MeetingRow(
                     meeting = meeting,
                     today = state.today,
-                    onClick = { viewModel.editMeeting(meeting) },
+                    onClick = { viewingMeeting = meeting },
                     onToggleFollowUp = { viewModel.toggleFollowUpDone(meeting) },
                 )
             }

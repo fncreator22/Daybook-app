@@ -1,5 +1,6 @@
 package com.sr2ma.daybook.sync
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -93,6 +95,13 @@ fun SyncSettingsSection(
             }
         }
 
+        var pendingFeatureName by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+        var pendingToggleAction by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<(() -> Unit)?>(null) }
+
+        androidx.compose.runtime.LaunchedEffect(state.isSignedIn) {
+            if (state.isSignedIn) showGoogleSheet = false
+        }
+
         if (showGoogleSheet) {
             val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
             androidx.compose.material3.ModalBottomSheet(
@@ -105,11 +114,52 @@ fun SyncSettingsSection(
                     profilePrimaryEmail = state.profilePrimaryEmail,
                     googleAuthConfigured = googleAuthConfigured,
                     busy = state.busy,
-                    onSignIn = { syncViewModel.signIn(); showGoogleSheet = false },
+                    errorMessage = state.errorMessage,
+                    onSignIn = { syncViewModel.signIn() },
                     onSignInOffline = { email -> syncViewModel.signInOffline(email); showGoogleSheet = false },
                     onSignOut = { syncViewModel.signOut(); showGoogleSheet = false },
                 )
             }
+        }
+
+        if (pendingFeatureName != null) {
+            AlertDialog(
+                onDismissRequest = { pendingFeatureName = null; pendingToggleAction = null },
+                title = { Text("Account Connection Required") },
+                text = {
+                    Text("To turn on \"$pendingFeatureName\", connect your Google account or link your offline profile.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val email = state.profilePrimaryEmail ?: "offline.user@daybook.local"
+                            syncViewModel.signInOffline(email)
+                            pendingToggleAction?.invoke()
+                            pendingFeatureName = null
+                            pendingToggleAction = null
+                        }
+                    ) {
+                        Text("Connect Profile (${state.profilePrimaryEmail ?: "Offline User"})")
+                    }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = {
+                            pendingFeatureName = null
+                            pendingToggleAction = null
+                            showGoogleSheet = true
+                        }) {
+                            Text("Google Sign-In")
+                        }
+                        TextButton(onClick = {
+                            pendingFeatureName = null
+                            pendingToggleAction = null
+                        }) {
+                            Text("Cancel")
+                        }
+                    }
+                },
+            )
         }
 
         Spacer(Modifier.height(8.dp))
@@ -123,6 +173,10 @@ fun SyncSettingsSection(
                     checked = state.calendarSyncMeetings,
                     enabled = state.isSignedIn,
                     onCheckedChange = { syncViewModel.toggleCalendarSyncMeetings() },
+                    onDisabledClick = {
+                        pendingFeatureName = "Calendar sync — meetings"
+                        pendingToggleAction = { syncViewModel.toggleCalendarSyncMeetings() }
+                    },
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 SyncToggleRow(
@@ -131,6 +185,10 @@ fun SyncSettingsSection(
                     checked = state.calendarSyncTasks,
                     enabled = state.isSignedIn,
                     onCheckedChange = { syncViewModel.toggleCalendarSyncTasks() },
+                    onDisabledClick = {
+                        pendingFeatureName = "Calendar sync — tasks"
+                        pendingToggleAction = { syncViewModel.toggleCalendarSyncTasks() }
+                    },
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 SyncToggleRow(
@@ -139,6 +197,10 @@ fun SyncSettingsSection(
                     checked = state.driveAutoBackup,
                     enabled = state.isSignedIn,
                     onCheckedChange = { syncViewModel.toggleDriveAutoBackup() },
+                    onDisabledClick = {
+                        pendingFeatureName = "Drive auto-backup"
+                        pendingToggleAction = { syncViewModel.toggleDriveAutoBackup() }
+                    },
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
                 SyncToggleRow(
@@ -147,6 +209,10 @@ fun SyncSettingsSection(
                     checked = state.gmailSync,
                     enabled = state.isSignedIn,
                     onCheckedChange = { syncViewModel.toggleGmailSync() },
+                    onDisabledClick = {
+                        pendingFeatureName = "Gmail sync & action extraction"
+                        pendingToggleAction = { syncViewModel.toggleGmailSync() }
+                    },
                 )
                 if (state.gmailSync) {
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp))
@@ -340,11 +406,19 @@ private fun SyncToggleRow(
     checked: Boolean,
     enabled: Boolean,
     onCheckedChange: () -> Unit,
+    onDisabledClick: (() -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (!enabled && onDisabledClick != null) {
+                    Modifier.clickable(onClick = onDisabledClick)
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -362,7 +436,7 @@ private fun SyncToggleRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = { onCheckedChange() },
+            onCheckedChange = { if (enabled) onCheckedChange() else onDisabledClick?.invoke() },
             enabled = enabled,
         )
     }
@@ -462,6 +536,7 @@ fun GoogleSignInSheet(
     profilePrimaryEmail: String? = null,
     googleAuthConfigured: Boolean,
     busy: Boolean,
+    errorMessage: String? = null,
     onSignIn: () -> Unit,
     onSignInOffline: ((String) -> Unit)? = null,
     onSignOut: () -> Unit,
@@ -522,13 +597,36 @@ fun GoogleSignInSheet(
                 }
             }
         } else {
+            if (!errorMessage.isNullOrBlank()) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Sign-In Notice",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = errorMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+            }
+
             // Option 1: Native Google Credential Manager
             androidx.compose.material3.Button(
                 onClick = onSignIn,
                 enabled = googleAuthConfigured && !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Continue with Google")
+                Text(if (busy) "Connecting with Google..." else "Continue with Google")
             }
 
             // Option 2: Connect via Offline Profile Email

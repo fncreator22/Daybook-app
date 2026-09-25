@@ -302,13 +302,20 @@ private fun PassRow(serial: Int, pass: Pass, onClick: () -> Unit) {
                 }
             }
 
-            // Arrow indicating clickable pass
-            Icon(
-                painter = painterResource(R.drawable.ic_close),
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // "dot dot dot" (•••) action indicator inviting user to tap and view Entry Pass
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                modifier = Modifier.padding(start = 4.dp),
+            ) {
+                Text(
+                    text = "•••",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
     }
 }
