@@ -13,19 +13,25 @@ import androidx.security.crypto.MasterKey
  * stored here alongside the account email so the Settings screen has one source
  * of truth, and the Worker has access without needing a ViewModel.
  */
-class SyncPreferences(context: Context) {
+class SyncPreferences(
+    context: Context? = null,
+    customPrefs: android.content.SharedPreferences? = null,
+) {
 
     private val prefs by lazy {
-        val masterKey = MasterKey.Builder(context.applicationContext)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            context.applicationContext,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+        customPrefs ?: run {
+            val ctx = requireNotNull(context) { "Context is required when customPrefs is not provided" }
+            val masterKey = MasterKey.Builder(ctx.applicationContext)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                ctx.applicationContext,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        }
     }
 
     // ── Account & User Profile ───────────────────────────────────────────────
@@ -41,6 +47,10 @@ class SyncPreferences(context: Context) {
     var profileLastName: String?
         get() = prefs.getString(KEY_PROFILE_LAST_NAME, null)
         set(value) = prefs.edit().putString(KEY_PROFILE_LAST_NAME, value).apply()
+
+    var profilePhoneNumber: String?
+        get() = prefs.getString(KEY_PROFILE_PHONE_NUMBER, null)
+        set(value) = prefs.edit().putString(KEY_PROFILE_PHONE_NUMBER, value).apply()
 
     var profilePrimaryEmail: String?
         get() = prefs.getString(KEY_PROFILE_PRIMARY_EMAIL, null) ?: accountEmail
@@ -236,6 +246,7 @@ class SyncPreferences(context: Context) {
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_PROFILE_FIRST_NAME = "profile_first_name"
         private const val KEY_PROFILE_LAST_NAME = "profile_last_name"
+        private const val KEY_PROFILE_PHONE_NUMBER = "profile_phone_number"
         private const val KEY_PROFILE_PRIMARY_EMAIL = "profile_primary_email"
         private const val KEY_PROFILE_SUB_EMAILS = "profile_sub_emails"
         private const val KEY_VERIFIED_EMAILS = "verified_emails"

@@ -7,6 +7,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import com.sr2ma.daybook.sync.SyncPreferences
 
 /**
  * Downloads the Gemma 270M INT4 QAT model file to internal storage.
@@ -85,6 +86,9 @@ class ModelDownloader(private val context: Context) {
             var redirects = 0
             val maxRedirects = 8
             var total = -1L
+
+            // Record network access for offline privacy tracking
+            SyncPreferences(context).recordNetworkAccess()
 
             while (true) {
                 val conn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {

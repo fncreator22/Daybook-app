@@ -71,6 +71,7 @@ fun ProfileSheet(
 
     var firstName by remember { mutableStateOf(syncPrefs.profileFirstName ?: "") }
     var lastName by remember { mutableStateOf(syncPrefs.profileLastName ?: "") }
+    var phoneNumber by remember { mutableStateOf(syncPrefs.profilePhoneNumber ?: "") }
     var primaryEmail by remember { mutableStateOf(syncPrefs.profilePrimaryEmail ?: "") }
 
     var subEmails by remember { mutableStateOf(syncPrefs.profileSubEmails.toList()) }
@@ -198,6 +199,16 @@ fun ProfileSheet(
                     }
                 }
             }
+
+            Spacer(Modifier.height(10.dp))
+
+            OutlinedTextField(
+                value = phoneNumber,
+                onValueChange = { phoneNumber = it },
+                label = { Text("Phone Number (optional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
@@ -354,6 +365,7 @@ fun ProfileSheet(
                 onClick = {
                     syncPrefs.profileFirstName = firstName.trim().ifBlank { null }
                     syncPrefs.profileLastName = lastName.trim().ifBlank { null }
+                    syncPrefs.profilePhoneNumber = phoneNumber.trim().ifBlank { null }
                     val fullName = listOf(firstName.trim(), lastName.trim()).filter { it.isNotBlank() }.joinToString(" ")
                     syncPrefs.userName = fullName.ifBlank { null }
                     if (primaryEmail.isNotBlank()) {

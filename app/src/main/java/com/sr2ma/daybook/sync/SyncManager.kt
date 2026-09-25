@@ -30,7 +30,13 @@ class SyncManager(
 
     // ── Auth ─────────────────────────────────────────────────────────────────
 
-    suspend fun signIn(): String? = authClient.signIn()
+    suspend fun signIn(): String? {
+        val result = authClient.signIn()
+        if (result != null) {
+            networkTracker.recordInternetAccess()
+        }
+        return result
+    }
 
     suspend fun signOut() {
         authClient.signOut()
@@ -78,11 +84,17 @@ class SyncManager(
 
     /** Enqueues an immediate calendar sync (user pressed "Sync now"). */
     fun syncNow() {
+        if (syncPrefs.accessToken?.startsWith("offline_") != true) {
+            networkTracker.recordInternetAccess()
+        }
         CalendarSyncWorker.enqueue(context)
     }
 
     /** Enqueues an immediate Drive backup (user pressed "Back up now"). */
     fun backupNow() {
+        if (syncPrefs.accessToken?.startsWith("offline_") != true) {
+            networkTracker.recordInternetAccess()
+        }
         DriveBackupWorker.enqueueOnce(context)
     }
 
@@ -105,6 +117,8 @@ class SyncManager(
      */
     suspend fun listDriveBackups(): List<DriveBackupWorker.DriveFile> = withContext(Dispatchers.IO) {
         val token = syncPrefs.accessToken ?: return@withContext emptyList()
+        if (token.startsWith("offline_")) return@withContext emptyList()
+        networkTracker.recordInternetAccess()
         try {
             DriveBackupWorker.listBackups(token)
         } catch (e: Exception) {
@@ -118,6 +132,8 @@ class SyncManager(
      */
     suspend fun restoreBackup(fileId: String, dbKey: ByteArray): Boolean = withContext(Dispatchers.IO) {
         val token = syncPrefs.accessToken ?: return@withContext false
+        if (token.startsWith("offline_")) return@withContext false
+        networkTracker.recordInternetAccess()
         val destDir = context.filesDir
         val tempFile = try {
             DriveBackupWorker.downloadBackup(fileId, token, destDir)

@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.sync
+package com.sr2ma.daybook.sync
 
 import android.content.Context
 import androidx.work.BackoffPolicy
@@ -55,6 +55,12 @@ class DriveBackupWorker(
         val accessToken = syncPrefs.accessToken ?: run {
             return@withContext Result.retry()
         }
+
+        if (accessToken.startsWith("offline_")) {
+            return@withContext Result.success()
+        }
+
+        syncPrefs.recordNetworkAccess()
 
         val dbFile = applicationContext.getDatabasePath(DaybookDatabase.DATABASE_NAME)
         if (!dbFile.exists()) {

@@ -80,6 +80,7 @@ object NaturalLanguageParser {
     private val MEETING_PREFIXES = listOf(
         // "meeting with X", "call with X", "zoom with X", etc.
         Regex("^(meeting|call|zoom|video call|video chat|catch.?up|1:1|one.on.one|sync|stand.?up|check.?in|debrief|retro|retrospective|interview) with\\b", RegexOption.IGNORE_CASE),
+        Regex("^(meeting|sync):", RegexOption.IGNORE_CASE),
         // "schedule / book / set up a meeting with X"
         Regex("^(schedule|book|set up|arrange|organise|organize|plan) (a |an )?(meeting|call|zoom|video|catch.?up|1:1|sync|stand.?up)\\b", RegexOption.IGNORE_CASE),
         // "have / join / attend a meeting"

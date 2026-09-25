@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.sync
+package com.sr2ma.daybook.sync
 
 import android.content.Context
 import androidx.work.BackoffPolicy
@@ -56,6 +56,12 @@ class CalendarSyncWorker(
         val accessToken = syncPrefs.accessToken ?: run {
             return@withContext Result.retry()
         }
+
+        if (accessToken.startsWith("offline_")) {
+            return@withContext Result.success()
+        }
+
+        syncPrefs.recordNetworkAccess()
 
         val database = DaybookDatabase.getInstance(applicationContext)
         val meetingDao = MeetingDao(database)
