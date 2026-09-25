@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.ui.editors
+package com.sr2ma.daybook.ui.editors
 
 import android.app.DatePickerDialog
 import androidx.compose.foundation.layout.Arrangement
@@ -170,7 +170,7 @@ fun PassConfirmSheet(
         )
 
         // Barcode value preview (read-only)
-        val preview = seed.barcodeValue.take(30) + if (seed.barcodeValue.length > 30) "â€¦" else ""
+        val preview = seed.barcodeValue.take(30) + if (seed.barcodeValue.length > 30) "…" else ""
         Text(
             text = stringResource(R.string.pass_barcode_preview, preview),
             style = MaterialTheme.typography.bodySmall,

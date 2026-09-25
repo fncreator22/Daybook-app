@@ -143,4 +143,55 @@ class NaturalLanguageParserTest {
         assertEquals(Priority.URGENT, result.priority)
         assertEquals(ParsedIntent.CREATE_TASK, result.intent)
     }
+
+    @Test
+    fun `shorthand priority exclamation mark tags are correctly parsed`() {
+        val highResult = NaturalLanguageParser.parse("deploy staging !high")
+        assertEquals(Priority.HIGH, highResult.priority)
+        assertEquals("deploy staging", highResult.taskTitle)
+
+        val urgentResult = NaturalLanguageParser.parse("database down !urgent")
+        assertEquals(Priority.URGENT, urgentResult.priority)
+        assertEquals("database down", urgentResult.taskTitle)
+
+        val lowResult = NaturalLanguageParser.parse("archive old logs !low")
+        assertEquals(Priority.LOW, lowResult.priority)
+        assertEquals("archive old logs", lowResult.taskTitle)
+    }
+
+    @Test
+    fun `shorthand priority does not trigger on words starting with high or low`() {
+        val highlighterResult = NaturalLanguageParser.parse("buy a !highlighter")
+        assertEquals(Priority.MEDIUM, highlighterResult.priority)
+        assertEquals("buy a !highlighter", highlighterResult.taskTitle)
+
+        val lowriderResult = NaturalLanguageParser.parse("service !lowrider car")
+        assertEquals(Priority.MEDIUM, lowriderResult.priority)
+        assertEquals("service !lowrider car", lowriderResult.taskTitle)
+    }
+
+    @Test
+    fun `numeric hashtags like issue numbers are preserved in title and not treated as project`() {
+        val result = NaturalLanguageParser.parse("fix bug #123")
+        assertEquals(ParsedIntent.CREATE_TASK, result.intent)
+        assertEquals("fix bug #123", result.taskTitle)
+        assertNull(result.project)
+    }
+
+    @Test
+    fun `project tag with hash is extracted and stripped from title`() {
+        val result = NaturalLanguageParser.parse("q3 budget !high #launch")
+
+        assertEquals(ParsedIntent.CREATE_TASK, result.intent)
+        assertEquals("q3 budget", result.taskTitle)
+        assertEquals(Priority.HIGH, result.priority)
+        assertEquals("launch", result.project)
+    }
+
+    @Test
+    fun `unicode project tag is extracted`() {
+        val result = NaturalLanguageParser.parse("sign contract #projet")
+        assertEquals("sign contract", result.taskTitle)
+        assertEquals("projet", result.project)
+    }
 }

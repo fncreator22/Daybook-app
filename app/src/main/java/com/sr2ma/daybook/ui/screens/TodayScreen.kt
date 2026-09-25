@@ -116,7 +116,11 @@ fun TodayScreen(
             }
         }
 
-        if (board.isEmpty) {
+        val hasSchedule = board.overdue.isNotEmpty() || board.dueToday.isNotEmpty() ||
+            board.inProgress.isNotEmpty() || board.upcoming.isNotEmpty() ||
+            board.meetings.isNotEmpty() || board.followUps.isNotEmpty()
+
+        if (!hasSchedule && board.log.isEmpty()) {
             item(key = "empty") {
                 EmptyState(
                     icon = R.drawable.ic_today,
@@ -208,10 +212,10 @@ fun TodayScreen(
                     onToggleFollowUp = { viewModel.toggleFollowUpDone(meeting) },
                 )
             }
-            logSection(entries = board.log, today = state.today, viewModel = viewModel)
-            whatsAppSection(messages = state.recentWhatsAppMessages)
-            gmailSection(messages = state.recentGmailMessages, onConvert = viewModel::convertGmailAction, onDismiss = viewModel::dismissGmailMessage)
         }
+        logSection(entries = board.log, today = state.today, viewModel = viewModel)
+        whatsAppSection(messages = state.recentWhatsAppMessages)
+        gmailSection(messages = state.recentGmailMessages, onConvert = viewModel::convertGmailAction, onDismiss = viewModel::dismissGmailMessage)
     }
 }
 
@@ -282,7 +286,7 @@ private fun WhatsAppMessageCard(msg: WhatsAppMessage) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = msg.message.take(80) + if (msg.message.length > 80) "â€¦" else "",
+                    text = msg.message.take(80) + if (msg.message.length > 80) "…" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),

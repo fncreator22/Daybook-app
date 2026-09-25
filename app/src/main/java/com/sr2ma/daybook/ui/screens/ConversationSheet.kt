@@ -362,6 +362,19 @@ private fun ConversationInputRow(
             onValueChange = { text = it },
             placeholder = { Text("Type or speak...") },
             singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSend = {
+                    val trimmed = text.trim()
+                    if (trimmed.isNotBlank()) {
+                        onSend(trimmed)
+                        text = ""
+                    }
+                }
+            ),
             modifier = Modifier.weight(1f),
         )
         IconButton(

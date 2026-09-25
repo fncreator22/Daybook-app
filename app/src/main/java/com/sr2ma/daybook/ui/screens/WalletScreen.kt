@@ -78,7 +78,7 @@ fun WalletScreen(
     if (state.passes.isEmpty()) {
         WalletEmptyState(
             onScan = { viewModel.openWalletScanner() },
-            onManual = { viewModel.newPassManual() },
+            onManual = { category -> viewModel.newPassManual(category) },
             modifier = modifier,
         )
     } else {
@@ -220,7 +220,7 @@ private fun PassRow(pass: Pass, onClick: () -> Unit) {
 @Composable
 private fun WalletEmptyState(
     onScan: () -> Unit,
-    onManual: () -> Unit,
+    onManual: (PassCategory) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showAddSheet by remember { mutableStateOf(false) }
@@ -246,7 +246,21 @@ private fun WalletEmptyState(
                 text = stringResource(R.string.wallet_empty_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
+            Spacer(Modifier.height(12.dp))
+            androidx.compose.material3.Button(
+                onClick = { showAddSheet = true },
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_add),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.wallet_add_title))
+            }
         }
     }
 
@@ -256,7 +270,10 @@ private fun WalletEmptyState(
             onDismissRequest = { showAddSheet = false },
             sheetState = sheetState,
         ) {
-            WalletAddSheet(onScan = { showAddSheet = false; onScan() }, onManual = { showAddSheet = false; onManual() })
+            WalletAddSheet(
+                onScan = { showAddSheet = false; onScan() },
+                onManual = { category -> showAddSheet = false; onManual(category) },
+            )
         }
     }
 }
@@ -264,7 +281,7 @@ private fun WalletEmptyState(
 // ── Add to Wallet bottom sheet — matches Google Wallet "Add to Wallet" UI ────
 
 @Composable
-fun WalletAddSheet(onScan: () -> Unit, onManual: () -> Unit) {
+fun WalletAddSheet(onScan: () -> Unit, onManual: (PassCategory) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -277,40 +294,40 @@ fun WalletAddSheet(onScan: () -> Unit, onManual: () -> Unit) {
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
         WalletAddRow(
+            iconRes = R.drawable.ic_pass_other,
+            titleRes = R.string.pass_cat_other,
+            subtitleRes = R.string.wallet_add_other_desc,
+            onClick = onScan,
+        )
+        WalletAddRow(
             iconRes = R.drawable.ic_pass_loyalty,
             titleRes = R.string.pass_cat_loyalty_card,
             subtitleRes = R.string.wallet_add_loyalty_desc,
-            onClick = onManual,
+            onClick = { onManual(PassCategory.LOYALTY_CARD) },
         )
         WalletAddRow(
             iconRes = R.drawable.ic_pass_gift,
             titleRes = R.string.pass_cat_gift_card,
             subtitleRes = R.string.wallet_add_gift_desc,
-            onClick = onManual,
+            onClick = { onManual(PassCategory.GIFT_CARD) },
         )
         WalletAddRow(
             iconRes = R.drawable.ic_pass_transport,
             titleRes = R.string.pass_cat_transport,
             subtitleRes = R.string.wallet_add_transport_desc,
-            onClick = onManual,
+            onClick = { onManual(PassCategory.TRANSPORT) },
         )
         WalletAddRow(
             iconRes = R.drawable.ic_pass_id,
             titleRes = R.string.pass_cat_id,
             subtitleRes = R.string.wallet_add_id_desc,
-            onClick = onManual,
+            onClick = { onManual(PassCategory.ID) },
         )
         WalletAddRow(
             iconRes = R.drawable.ic_pass_health,
             titleRes = R.string.pass_cat_health,
             subtitleRes = R.string.wallet_add_health_desc,
-            onClick = onManual,
-        )
-        WalletAddRow(
-            iconRes = R.drawable.ic_pass_other,
-            titleRes = R.string.pass_cat_other,
-            subtitleRes = R.string.wallet_add_other_desc,
-            onClick = onScan,
+            onClick = { onManual(PassCategory.HEALTH) },
         )
     }
 }

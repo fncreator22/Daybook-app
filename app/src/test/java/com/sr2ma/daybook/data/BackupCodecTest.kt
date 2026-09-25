@@ -3,6 +3,8 @@ package com.sr2ma.daybook.data
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.LogKind
 import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.Pass
+import com.sr2ma.daybook.domain.model.PassCategory
 import com.sr2ma.daybook.domain.model.Priority
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.TaskStatus
@@ -62,7 +64,22 @@ class BackupCodecTest {
         updatedAt = 1_700_000_000_000L,
     )
 
-    private val snapshot = Snapshot(listOf(task), listOf(entry), listOf(meeting))
+    private val pass = Pass(
+        id = 5L,
+        title = "Gym Membership",
+        category = PassCategory.LOYALTY_CARD,
+        barcodeValue = "1234567890",
+        barcodeFormat = "CODE_128",
+        ocrText = "Gym Pass 2026",
+        notes = "Scan at gate",
+        expiryDate = LocalDate.of(2026, 12, 31),
+        balance = "$50",
+        imagePath = "/data/pass.png",
+        createdAt = 1_700_000_000_000L,
+        updatedAt = 1_700_000_000_000L,
+    )
+
+    private val snapshot = Snapshot(listOf(task), listOf(entry), listOf(meeting), listOf(pass))
 
     @Test
     fun `round trip preserves every field`() {
@@ -191,5 +208,12 @@ class BackupCodecTest {
             "daybook-backup-2026-09-03.json",
             BackupCodec.suggestedFileName(LocalDate.of(2026, 9, 3)),
         )
+    }
+
+    @Test
+    fun `backwards compatibility with backup without passes array`() {
+        val file = """{"format":"daybook-backup","version":1,"tasks":[],"logEntries":[],"meetings":[]}"""
+        val decoded = codec.decode(file)
+        assertTrue(decoded.passes.isEmpty())
     }
 }

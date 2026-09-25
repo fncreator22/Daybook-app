@@ -186,6 +186,9 @@ class DaybookRepository(internal val database: DaybookDatabase) {
             whatsAppDao.deleteAll()
             gmailDao.deleteAll()
             conversationDao.deleteAll()
+            database.writableDatabase.delete("user_preferences", null, null)
+            database.writableDatabase.delete("kg_edges", null, null)
+            database.writableDatabase.delete("kg_nodes", null, null)
         }
         refreshAll()
     }
@@ -212,6 +215,9 @@ class DaybookRepository(internal val database: DaybookDatabase) {
                 whatsAppDao.deleteAll()
                 gmailDao.deleteAll()
                 conversationDao.deleteAll()
+                database.writableDatabase.delete("user_preferences", null, null)
+                database.writableDatabase.delete("kg_edges", null, null)
+                database.writableDatabase.delete("kg_nodes", null, null)
             }
 
             val remappedMeetingIds = HashMap<Long, Long>(snapshot.meetings.size)
@@ -247,7 +253,22 @@ class DaybookRepository(internal val database: DaybookDatabase) {
                 )
             }
 
-            DataCounts(snapshot.tasks.size, snapshot.logEntries.size, snapshot.meetings.size)
+            snapshot.passes.forEach { pass ->
+                passDao.upsert(
+                    pass.copy(
+                        id = 0L,
+                        createdAt = if (pass.createdAt == 0L) now else pass.createdAt,
+                        updatedAt = if (pass.updatedAt == 0L) now else pass.updatedAt,
+                    ),
+                )
+            }
+
+            DataCounts(
+                tasks = snapshot.tasks.size,
+                logEntries = snapshot.logEntries.size,
+                meetings = snapshot.meetings.size,
+                passes = snapshot.passes.size,
+            )
         }
 
         refreshAll()
@@ -267,6 +288,7 @@ class DaybookRepository(internal val database: DaybookDatabase) {
             tasks = taskDao.all(),
             logEntries = logDao.all(),
             meetings = meetingDao.all(),
+            passes = passDao.all(),
         )
     }
 
@@ -292,11 +314,17 @@ class DaybookRepository(internal val database: DaybookDatabase) {
 }
 
 /** Row counts, for the Settings screen. */
-data class DataCounts(val tasks: Int, val logEntries: Int, val meetings: Int)
+data class DataCounts(
+    val tasks: Int,
+    val logEntries: Int,
+    val meetings: Int,
+    val passes: Int = 0,
+)
 
 /** Everything Daybook stores, in one value. Used for export and import. */
 data class Snapshot(
     val tasks: List<Task> = emptyList(),
     val logEntries: List<LogEntry> = emptyList(),
     val meetings: List<Meeting> = emptyList(),
+    val passes: List<Pass> = emptyList(),
 )

@@ -89,7 +89,8 @@ class DaybookViewModel(
                 // In `finally` on purpose. Setting this only on the success path
                 // would leave LoadingGate on screen for ever after a failed first
                 // read, with no way for the user to even reach Settings.
-                update { it.copy(loaded = true) }
+                val modelReady = modelDownloader?.isModelPresent() ?: false
+                update { it.copy(loaded = true, llmModelReady = modelReady) }
             }
         }
         // Load recent WhatsApp and Gmail messages for the Today board.
@@ -163,6 +164,7 @@ class DaybookViewModel(
                         dueDate = parsed.dueDate ?: _state.value.today,
                         priority = parsed.priority,
                         status = TaskStatus.OPEN,
+                        project = parsed.project,
                     )
                     repository.saveTask(task)
                 } else if (action.startsWith("Meeting:", ignoreCase = true)) {
@@ -253,8 +255,8 @@ class DaybookViewModel(
      * Opens a blank pass sheet for manual card entry.
      * The user fills in all fields by hand — no camera needed.
      */
-    fun newPassManual() = update {
-        it.copy(editor = Editor.PassSheet(Pass(title = "", barcodeValue = "", barcodeFormat = "")))
+    fun newPassManual(category: com.sr2ma.daybook.domain.model.PassCategory = com.sr2ma.daybook.domain.model.PassCategory.OTHER) = update {
+        it.copy(editor = Editor.PassSheet(Pass(title = "", category = category, barcodeValue = "", barcodeFormat = "")))
     }
 
     /** Navigate to the Wallet tab from the Today dashboard "View more" button. */
@@ -338,6 +340,11 @@ class DaybookViewModel(
 
     /** Called when SpeechRecognizer returns a result (or error). */
     fun onVoiceResult(text: String) {
+        if (_state.value.conversationOpen) {
+            update { it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null) }
+            sendConversationMessage(text)
+            return
+        }
         val parsed = NaturalLanguageParser.parse(text, referenceDate = _state.value.today)
         update { it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null, voiceResult = VoiceAgentResult(text, parsed)) }
     }
@@ -390,6 +397,7 @@ class DaybookViewModel(
                             title    = title,
                             priority = parsed.priority,
                             dueDate  = parsed.dueDate,
+                            project  = parsed.project,
                         )
                     )
                 }
@@ -837,6 +845,7 @@ class DaybookViewModel(
                             title    = title,
                             priority = parsed?.priority ?: com.sr2ma.daybook.domain.model.Priority.MEDIUM,
                             dueDate  = parsed?.dueDate,
+                            project  = parsed?.project,
                         )
                     )
                 }
@@ -934,6 +943,7 @@ class DaybookViewModel(
                             title = parsed.taskTitle?.ifBlank { null } ?: title.trim(),
                             priority = parsed.priority,
                             dueDate = parsed.dueDate ?: today,
+                            project = parsed.project,
                         )
                     )
                 }
@@ -1067,6 +1077,7 @@ class DaybookViewModel(
                             counts.tasks,
                             counts.logEntries,
                             counts.meetings,
+                            counts.passes,
                         )
                     },
                 )

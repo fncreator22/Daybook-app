@@ -22,6 +22,7 @@ data class ParseResult(
     val priority: Priority = Priority.MEDIUM,
     val status: TaskStatus = TaskStatus.OPEN,
     val dueDate: LocalDate? = null,
+    val project: String? = null,
     // Log fields
     val logBody: String? = null,
     val logKind: LogKind = LogKind.NOTE,
@@ -66,6 +67,7 @@ object NaturalLanguageParser {
             priority  = extractPriority(lower),
             status    = TaskStatus.OPEN,
             dueDate   = extractDueDate(lower, referenceDate),
+            project   = extractProject(trimmed),
         )
     }
 
@@ -186,15 +188,26 @@ object NaturalLanguageParser {
             priority  = extractPriority(lower),
             status    = TaskStatus.OPEN,
             dueDate   = extractDueDate(lower, reference),
+            project   = extractProject(original),
         )
     }
+
+    private val SHORTHAND_URGENT = Regex("(?:^|\\s)!urgent\\b", RegexOption.IGNORE_CASE)
+    private val SHORTHAND_HIGH   = Regex("(?:^|\\s)!high\\b", RegexOption.IGNORE_CASE)
+    private val SHORTHAND_LOW    = Regex("(?:^|\\s)!low\\b", RegexOption.IGNORE_CASE)
+    private val SHORTHAND_MED    = Regex("(?:^|\\s)!(med|medium)\\b", RegexOption.IGNORE_CASE)
 
     // ── Priority extraction ───────────────────────────────────────────────────
 
     private fun extractPriority(lower: String): Priority = when {
+        SHORTHAND_URGENT.containsMatchIn(lower) -> Priority.URGENT
+        SHORTHAND_HIGH.containsMatchIn(lower) -> Priority.HIGH
+        SHORTHAND_LOW.containsMatchIn(lower) -> Priority.LOW
+        SHORTHAND_MED.containsMatchIn(lower) -> Priority.MEDIUM
+
         lower.contains("urgent") || lower.contains("asap") ||
         lower.contains("critical") || lower.contains("emergency") ||
-        lower.contains("immediately") || lower.startsWith("!") -> Priority.URGENT
+        lower.contains("immediately") || Regex("(?:^|\\s)!(?:\\s|$)").containsMatchIn(lower) -> Priority.URGENT
 
         lower.contains("important") || lower.contains("high priority") ||
         lower.contains("high-priority") || lower.contains("must do") -> Priority.HIGH
@@ -204,6 +217,14 @@ object NaturalLanguageParser {
         lower.contains("when you get a chance") -> Priority.LOW
 
         else -> Priority.MEDIUM
+    }
+
+    // ── Project extraction ────────────────────────────────────────────────────
+
+    private val PROJECT_TAG_REGEX = Regex("(?:^|\\s)#([\\p{L}][\\p{L}0-9_-]*)")
+
+    private fun extractProject(input: String): String? {
+        return PROJECT_TAG_REGEX.find(input)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
     }
 
     // ── Due date extraction ───────────────────────────────────────────────────
@@ -286,7 +307,10 @@ object NaturalLanguageParser {
             "\\b(next |this |on )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\\b",
             RegexOption.IGNORE_CASE,
         ), "")
-        // Strip priority keywords
+        // Strip priority keywords and shorthand tags
+        .replace(Regex("(?:^|\\s)!(urgent|high|medium|med|low)\\b", RegexOption.IGNORE_CASE), " ")
+        // Strip project tags (#project) — requires starting with letter to avoid stripping issue numbers like #123
+        .replace(Regex("(?:^|\\s)#[\\p{L}][\\p{L}0-9_-]*(?=\\s|$)"), " ")
         .replace(Regex(
             "\\b(urgent|asap|critical|important|high priority|high-priority|low priority|low-priority|no rush|whenever)\\b",
             RegexOption.IGNORE_CASE,

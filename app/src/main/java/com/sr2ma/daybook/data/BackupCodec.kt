@@ -4,6 +4,8 @@ import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.LogKind
 import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.Pass
+import com.sr2ma.daybook.domain.model.PassCategory
 import com.sr2ma.daybook.domain.model.Priority
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.TaskStatus
@@ -49,6 +51,7 @@ class BackupCodec {
         root.put("meetings", snapshot.meetings.toArray(::encodeMeeting))
         root.put("tasks", snapshot.tasks.toArray(::encodeTask))
         root.put("logEntries", snapshot.logEntries.toArray(::encodeLogEntry))
+        root.put("passes", snapshot.passes.toArray(::encodePass))
         return root.toString(2)
     }
 
@@ -106,6 +109,21 @@ class BackupCodec {
         put("updatedAt", meeting.updatedAt)
     }
 
+    private fun encodePass(pass: Pass): JSONObject = JSONObject().apply {
+        put("id", pass.id)
+        put("title", pass.title)
+        put("category", pass.category.storedValue)
+        putIfNotBlank("barcodeValue", pass.barcodeValue)
+        putIfNotBlank("barcodeFormat", pass.barcodeFormat)
+        putIfNotBlank("ocrText", pass.ocrText)
+        putIfNotBlank("notes", pass.notes)
+        putIfNotNull("expiryDate", Dates.store(pass.expiryDate))
+        putIfNotNull("balance", pass.balance)
+        putIfNotNull("imagePath", pass.imagePath)
+        put("createdAt", pass.createdAt)
+        put("updatedAt", pass.updatedAt)
+    }
+
     // Empty and null are the same thing here, and leaving the key out entirely
     // keeps the file short and readable rather than full of "" and null.
     private fun JSONObject.putIfNotBlank(key: String, value: String) {
@@ -148,6 +166,7 @@ class BackupCodec {
             tasks = root.rows("tasks", ::decodeTask),
             logEntries = root.rows("logEntries", ::decodeLogEntry),
             meetings = root.rows("meetings", ::decodeMeeting),
+            passes = root.rows("passes", ::decodePass),
         )
     }
 
@@ -209,6 +228,25 @@ class BackupCodec {
             notes = json.text("notes"),
             nextTouch = Dates.parseDate(json.stringOrNull("nextTouch")),
             followUpDone = json.optBoolean("followUpDone", false),
+            createdAt = json.optLong("createdAt", 0L),
+            updatedAt = json.optLong("updatedAt", 0L),
+        )
+    }
+
+    private fun decodePass(json: JSONObject): Pass? {
+        val title = json.text("title")
+        if (title.isBlank()) return null
+        return Pass(
+            id = json.optLong("id", 0L),
+            title = title,
+            category = PassCategory.fromStored(json.stringOrNull("category")),
+            barcodeValue = json.text("barcodeValue"),
+            barcodeFormat = json.text("barcodeFormat"),
+            ocrText = json.text("ocrText"),
+            notes = json.text("notes"),
+            expiryDate = Dates.parseDate(json.stringOrNull("expiryDate")),
+            balance = json.stringOrNull("balance"),
+            imagePath = json.stringOrNull("imagePath"),
             createdAt = json.optLong("createdAt", 0L),
             updatedAt = json.optLong("updatedAt", 0L),
         )

@@ -160,12 +160,12 @@
     <string name="settings_privacy_body">Daybook stores everything on-device in an encrypted database. Camera is used only for barcode scanning; microphone for voice commands only. Internet is used only for the optional model download and Google sync - both are strictly opt-in and off by default. No data is sent anywhere without your explicit action.</string>
     <string name="settings_export_success">Backup saved</string>
     <string name="settings_export_failure">Could not save the backup</string>
-    <string name="settings_import_success">Imported %1$d tasks, %2$d log entries, %3$d meetings</string>
+    <string name="settings_import_success">Imported %1$d tasks, %2$d log entries, %3$d meetings, %4$d passes</string>
     <string name="settings_import_failure">Could not read that file</string>
     <string name="settings_delete_all">Delete all data</string>
-    <string name="settings_delete_all_body">Removes every task, log entry and meeting from this device.</string>
+    <string name="settings_delete_all_body">Permanently removes all tasks, log entries, meetings, passes, messages, and history from this device.</string>
     <string name="settings_delete_all_confirm_title">Delete everything?</string>
-    <string name="settings_delete_all_confirm_body">All tasks, log entries and meetings will be removed. Export a backup first if you might want any of it later. This cannot be undone.</string>
+    <string name="settings_delete_all_confirm_body">All tasks, log entries, meetings, passes, messages, and conversation history will be permanently removed. Export a backup first if you might want any of it later. This cannot be undone.</string>
 
     <!-- Date and time helpers -->
     <string name="date_today">Today</string>

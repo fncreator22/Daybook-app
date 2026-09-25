@@ -34,6 +34,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -471,7 +472,7 @@ private fun WalletAddMenu(viewModel: DaybookViewModel) {
         ) {
             com.sr2ma.daybook.ui.screens.WalletAddSheet(
                 onScan = { showSheet = false; viewModel.openWalletScanner() },
-                onManual = { showSheet = false; viewModel.newPassManual() },
+                onManual = { category -> showSheet = false; viewModel.newPassManual(category) },
             )
         }
     }
@@ -540,27 +541,32 @@ private fun VoiceAgentButton(
                     .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
             )
         }
-        FloatingActionButton(
-            onClick = onTap,
-            modifier = Modifier.combinedClickable(
-                onClick = onTap,
-                onLongClick = {
-                    haptic.performHapticFeedback(
-                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
-                    )
-                    onLongPress()
-                },
-                onLongClickLabel = "Open conversation",
-            ),
-            containerColor = if (isListening) MaterialTheme.colorScheme.primaryContainer
+        Surface(
+            modifier = Modifier
+                .size(56.dp)
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = {
+                        haptic.performHapticFeedback(
+                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
+                        )
+                        onLongPress()
+                    },
+                    onLongClickLabel = "Open conversation",
+                ),
+            shape = CircleShape,
+            color = if (isListening) MaterialTheme.colorScheme.primaryContainer
             else MaterialTheme.colorScheme.secondaryContainer,
+            shadowElevation = 6.dp,
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_mic),
-                contentDescription = stringResource(R.string.cd_voice_agent),
-                tint = if (isListening) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_mic),
+                    contentDescription = stringResource(R.string.cd_voice_agent),
+                    tint = if (isListening) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
         }
     }
 }
