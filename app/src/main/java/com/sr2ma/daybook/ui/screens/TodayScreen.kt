@@ -117,6 +117,7 @@ fun TodayScreen(
     viewingPass?.let { pass ->
         EntryPassSheet(
             pass = pass,
+            userName = userName,
             onEdit = { passToEdit ->
                 viewingPass = null
                 viewModel.editPass(passToEdit)
@@ -339,9 +340,6 @@ fun TodayScreen(
                     }
                 }
             }
-        }
-        item(key = "quick-add") {
-            QuickAddField(onAdd = viewModel::quickAddTask)
         }
 
         // Active passes widget: horizontal chip row, View More + Add buttons
@@ -616,56 +614,6 @@ private fun DayHeader(
     }
 }
 
-/**
- * One line in, one task out, due today.
- *
- * Everything else about the task takes its default, because the point of this
- * field is to get a thought out of your head in one gesture; the full editor is
- * still one tap away on the row it creates.
- */
-@Composable
-private fun QuickAddField(
-    onAdd: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // Saveable, not plain `remember`: this field lives inside a LazyColumn item,
-    // and a half-typed line would otherwise be thrown away as soon as the item
-    // scrolled out of the viewport.
-    var text by rememberSaveable { mutableStateOf("") }
-    val submit = {
-        if (text.isNotBlank()) {
-            onAdd(text.trim())
-            text = ""
-        }
-    }
-
-    OutlinedTextField(
-        value = text,
-        onValueChange = { text = it },
-        placeholder = { Text(stringResource(R.string.today_quick_add_hint)) },
-        singleLine = true,
-        shape = MaterialTheme.shapes.small,
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.Sentences,
-            imeAction = ImeAction.Done,
-        ),
-        keyboardActions = KeyboardActions(onDone = { submit() }),
-        // The button only appears once there is something to add, so an empty field
-        // is a plain prompt rather than a control with a dead affordance on it.
-        trailingIcon = {
-            if (text.isNotBlank()) {
-                IconButton(onClick = submit) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_add),
-                        contentDescription = stringResource(R.string.cd_add_task),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-        },
-        modifier = modifier.fillMaxWidth(),
-    )
-}
 
 // â”€â”€ Active Passes Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

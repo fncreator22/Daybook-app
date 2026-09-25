@@ -306,7 +306,12 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
                         DaybookTab.TASKS -> TasksScreen(state, viewModel, content)
                         DaybookTab.LOG -> LogScreen(state, viewModel, content)
                         DaybookTab.MEETINGS -> MeetingsScreen(state, viewModel, content)
-                        DaybookTab.WALLET -> WalletScreen(state, viewModel, content)
+                        DaybookTab.WALLET -> WalletScreen(
+                            state = state,
+                            viewModel = viewModel,
+                            userName = syncState.userName,
+                            modifier = content,
+                        )
                         DaybookTab.SETTINGS -> SettingsScreen(
                             state = state,
                             viewModel = viewModel,
