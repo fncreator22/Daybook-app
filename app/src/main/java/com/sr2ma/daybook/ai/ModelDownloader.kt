@@ -42,12 +42,14 @@ class ModelDownloader(private val context: Context) {
      * @param url            HTTPS URL to the `.litertlm` model file on Hugging Face.
      * @param expectedSha256 Lowercase hex SHA-256 of the expected file content.
      * @param versionTag     Short version string embedded in the filename, e.g. "v1".
+     * @param authToken      Optional Hugging Face Bearer token for gated model access.
      * @param onProgress     Optional progress callback (called on IO thread).
      */
     suspend fun download(
         url: String,
         expectedSha256: String,
         versionTag: String = "v1",
+        authToken: String? = null,
         onProgress: ProgressListener? = null,
     ): DownloadResult = withContext(Dispatchers.IO) {
         val modelDir = context.filesDir
@@ -91,6 +93,9 @@ class ModelDownloader(private val context: Context) {
                     connectTimeout = 30_000
                     readTimeout = 60_000
                     setRequestProperty("User-Agent", "Daybook-ModelDownloader/1.0")
+                    if (!authToken.isNullOrBlank()) {
+                        setRequestProperty("Authorization", "Bearer ${authToken.trim()}")
+                    }
                 }
                 val code = conn.responseCode
                 if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER, 307, 308)) {
@@ -104,7 +109,14 @@ class ModelDownloader(private val context: Context) {
                     }
                     continue
                 }
+                if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                    conn.disconnect()
+                    return@withContext DownloadResult.Failure(
+                        "Server returned HTTP 401 Unauthorized: Hugging Face gated model requires authorization. Please configure your Hugging Face API token in Settings or use local model import.",
+                    )
+                }
                 if (code != HttpURLConnection.HTTP_OK) {
+                    conn.disconnect()
                     return@withContext DownloadResult.Failure("Server returned HTTP $code")
                 }
                 connection = conn

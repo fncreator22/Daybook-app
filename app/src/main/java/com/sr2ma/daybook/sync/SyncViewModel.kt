@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
  * the main ViewModel stays decoupled from network concerns.
  */
 class SyncViewModel(
-    private val syncManager: SyncManager,
+    val syncManager: SyncManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(loadState())
@@ -33,7 +33,9 @@ class SyncViewModel(
             userName = prefs.userName,
             onboardingCompleted = prefs.onboardingCompleted,
             isSignedIn = prefs.isSignedIn,
-            accountEmail = prefs.accountEmail,
+            accountEmail = prefs.accountEmail ?: prefs.profilePrimaryEmail,
+            profilePrimaryEmail = prefs.profilePrimaryEmail,
+            verifiedEmails = prefs.verifiedEmails,
             calendarSyncMeetings = prefs.calendarSyncMeetings,
             calendarSyncTasks = prefs.calendarSyncTasks,
             driveAutoBackup = prefs.driveAutoBackup,
@@ -43,11 +45,34 @@ class SyncViewModel(
             gmailFilterSpam = prefs.gmailFilterSpam,
             gmailFilterMarketing = prefs.gmailFilterMarketing,
             lastGmailSyncAt = prefs.lastGmailSyncAt,
+            globalAutonomyGuardrail = prefs.globalAutonomyGuardrail,
+            isOnline = syncManager.networkTracker.isConnected.value,
+            connectionType = syncManager.networkTracker.connectionType.value,
+            lastAccessFormatted = syncManager.networkTracker.formattedLastAccess(),
             autonomyLevels = ToolCategory.entries.associateWith { prefs.getAutonomy(it) },
         )
     }
 
-    private fun refreshState() {
+    init {
+        viewModelScope.launch {
+            syncManager.networkTracker.isConnected.collect { online ->
+                _state.value = _state.value.copy(
+                    isOnline = online,
+                    lastAccessFormatted = syncManager.networkTracker.formattedLastAccess()
+                )
+            }
+        }
+        viewModelScope.launch {
+            syncManager.networkTracker.connectionType.collect { connType ->
+                _state.value = _state.value.copy(
+                    connectionType = connType,
+                    lastAccessFormatted = syncManager.networkTracker.formattedLastAccess()
+                )
+            }
+        }
+    }
+
+    fun refreshState() {
         _state.value = loadState()
     }
 
@@ -77,6 +102,11 @@ class SyncViewModel(
     }
 
     // ── Autonomy level control (§8) ───────────────────────────────────────────
+
+    fun setGlobalAutonomy(guardrail: String) {
+        syncManager.syncPrefs.globalAutonomyGuardrail = guardrail
+        _state.value = _state.value.copy(globalAutonomyGuardrail = guardrail)
+    }
 
     fun setAutonomy(category: ToolCategory, level: AutonomyLevel) {
         syncManager.syncPrefs.setAutonomy(category, level)
@@ -112,6 +142,11 @@ class SyncViewModel(
             }
             _state.value = _state.value.copy(busy = false)
         }
+    }
+
+    fun signInOffline(email: String) {
+        syncManager.authClient.signInOffline(email)
+        refreshState()
     }
 
     fun signOut() {
@@ -251,6 +286,8 @@ data class SyncUiState(
     val onboardingCompleted: Boolean = false,
     val isSignedIn: Boolean = false,
     val accountEmail: String? = null,
+    val profilePrimaryEmail: String? = null,
+    val verifiedEmails: Set<String> = emptySet(),
     val calendarSyncMeetings: Boolean = false,
     val calendarSyncTasks: Boolean = false,
     val driveAutoBackup: Boolean = false,
@@ -267,6 +304,10 @@ data class SyncUiState(
     val driveBackups: List<DriveBackupWorker.DriveFile> = emptyList(),
     val errorMessage: String? = null,
     val gmailSyncMessage: String? = null,
+    val globalAutonomyGuardrail: String = "ALWAYS_ASK",
+    val isOnline: Boolean = false,
+    val connectionType: String = "Offline",
+    val lastAccessFormatted: String = "Never (100% Offline)",
     /** Per-tool autonomy levels. Default ASK_EVERY_TIME for all categories. */
     val autonomyLevels: Map<ToolCategory, AutonomyLevel> = emptyMap(),
 )

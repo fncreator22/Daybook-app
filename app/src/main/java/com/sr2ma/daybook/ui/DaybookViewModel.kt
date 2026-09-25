@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.sr2ma.daybook.sync.SyncPreferences
 import java.io.InputStream
 import java.io.OutputStream
 import java.time.LocalDate
@@ -64,6 +65,7 @@ class DaybookViewModel(
     private val llmEngine: LlmEngine? = null,
     /** Used for fast model-present check on [openConversation]. */
     private val modelDownloader: ModelDownloader? = null,
+    private val syncPreferences: SyncPreferences? = null,
 ) : ViewModel() {
 
     private val whatsAppDao = WhatsAppDao(repository.database)
@@ -346,7 +348,27 @@ class DaybookViewModel(
             return
         }
         val parsed = NaturalLanguageParser.parse(text, referenceDate = _state.value.today)
-        update { it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null, voiceResult = VoiceAgentResult(text, parsed)) }
+        val guardrail = syncPreferences?.globalAutonomyGuardrail ?: "ALWAYS_ASK"
+
+        val canAutoCommit = when (guardrail) {
+            "FULL_AUTONOMY" -> parsed.intent != ParsedIntent.UNKNOWN
+            "HYBRID" -> parsed.intent == ParsedIntent.CREATE_TASK || parsed.intent == ParsedIntent.CREATE_LOG
+            else -> false // ALWAYS_ASK
+        }
+
+        if (canAutoCommit) {
+            update { it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null) }
+            commitParsedIntent(text, parsed)
+        } else {
+            update {
+                it.copy(
+                    isListening = false,
+                    voiceRetried = false,
+                    voiceRetryMessage = null,
+                    voiceResult = VoiceAgentResult(text, parsed),
+                )
+            }
+        }
     }
 
     /** Called when SpeechRecognizer returns nothing (silence timeout, no match, error). */
@@ -382,15 +404,11 @@ class DaybookViewModel(
         it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null, message = msg)
     }
 
-    /** User tapped "Add it" on the confirmation sheet — commit to DB. */
-    fun confirmVoiceResult() {
-        val result = _state.value.voiceResult ?: return
-        update { it.copy(voiceResult = null) }
-        val parsed: ParseResult = result.parseResult
+    private fun commitParsedIntent(text: String, parsed: ParseResult) {
         val today = _state.value.today
         when (parsed.intent) {
             ParsedIntent.CREATE_TASK -> {
-                val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: result.spokenText
+                val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: text
                 write {
                     repository.saveTask(
                         Task(
@@ -403,7 +421,7 @@ class DaybookViewModel(
                 }
             }
             ParsedIntent.CREATE_LOG -> {
-                val body = parsed.logBody?.takeIf { it.isNotBlank() } ?: result.spokenText
+                val body = parsed.logBody?.takeIf { it.isNotBlank() } ?: text
                 write {
                     repository.saveLogEntry(
                         LogEntry(body = body, kind = parsed.logKind, day = today)
@@ -411,7 +429,7 @@ class DaybookViewModel(
                 }
             }
             ParsedIntent.CREATE_MEETING -> {
-                val title = parsed.meetingTitle?.takeIf { it.isNotBlank() } ?: result.spokenText
+                val title = parsed.meetingTitle?.takeIf { it.isNotBlank() } ?: text
                 // Use the parser-extracted date if present, fall back to today
                 val day = parsed.dueDate ?: today
                 write {
@@ -420,9 +438,16 @@ class DaybookViewModel(
             }
             ParsedIntent.UNKNOWN -> {
                 // Treat as a plain task so nothing the user says is ever silently lost
-                write { repository.saveTask(Task(title = result.spokenText)) }
+                write { repository.saveTask(Task(title = text)) }
             }
         }
+    }
+
+    /** User tapped "Add it" on the confirmation sheet — commit to DB. */
+    fun confirmVoiceResult() {
+        val result = _state.value.voiceResult ?: return
+        update { it.copy(voiceResult = null) }
+        commitParsedIntent(result.spokenText, result.parseResult)
     }
 
     /** User dismissed the confirmation sheet without saving. */
@@ -519,7 +544,7 @@ class DaybookViewModel(
      *
      * Requires HuggingFace account + Gemma license acceptance.
      */
-    fun downloadModel() {
+    fun downloadModel(token: String? = null, customUrl: String? = null) {
         val downloader = modelDownloader ?: return
         if (downloader.isModelPresent()) {
             update { it.copy(llmModelReady = true) }
@@ -529,9 +554,10 @@ class DaybookViewModel(
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             update { it.copy(modelDownloadProgress = 0f) }
             val result = downloader.download(
-                url = com.sr2ma.daybook.ai.ModelDownloader.GEMMA_270M_V1_URL,
+                url = customUrl ?: com.sr2ma.daybook.ai.ModelDownloader.GEMMA_270M_V1_URL,
                 expectedSha256 = com.sr2ma.daybook.ai.ModelDownloader.GEMMA_270M_V1_SHA256,
                 versionTag = "v1",
+                authToken = token,
                 onProgress = com.sr2ma.daybook.ai.ModelDownloader.ProgressListener { downloaded, total ->
                     val progress = if (total > 0) downloaded.toFloat() / total else 0f
                     update { it.copy(modelDownloadProgress = progress) }
@@ -668,6 +694,7 @@ class DaybookViewModel(
             val today = _state.value.today
             val parsed = NaturalLanguageParser.parse(safText, referenceDate = today)
 
+            val guardrail = syncPreferences?.globalAutonomyGuardrail ?: "ALWAYS_ASK"
             val (agentText, chips) = when (parsed.intent) {
                 ParsedIntent.CREATE_TASK -> {
                     val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
@@ -678,16 +705,26 @@ class DaybookViewModel(
                         else                                           -> ""
                     }
                     val dateLabel = parsed.dueDate?.let { ", due ${it}" } ?: ""
-                    "Got it — task: \"$title\"$priorityLabel$dateLabel. Add it?" to
-                        listOf("Add task", "Dismiss")
+                    if (guardrail == "FULL_AUTONOMY" || guardrail == "HYBRID") {
+                        commitParsedIntent(safText, parsed)
+                        "I've added the task: \"$title\"$priorityLabel$dateLabel." to listOf("Dismiss")
+                    } else {
+                        "Sir, can I do that? — Add task: \"$title\"$priorityLabel$dateLabel?" to
+                            listOf("Add task", "Dismiss")
+                    }
                 }
                 ParsedIntent.CREATE_MEETING -> {
                     val title = parsed.meetingTitle?.takeIf { it.isNotBlank() } ?: safText
                     val who = if (parsed.meetingAttendees.isNotEmpty())
                         " with ${parsed.meetingAttendees.joinToString(", ")}" else ""
                     val day = parsed.dueDate ?: today
-                    "Meeting: \"$title\"$who on $day. Add it?" to
-                        listOf("Add meeting", "Dismiss")
+                    if (guardrail == "FULL_AUTONOMY") {
+                        commitParsedIntent(safText, parsed)
+                        "I've scheduled the meeting: \"$title\"$who on $day." to listOf("Dismiss")
+                    } else {
+                        "Sir, can I schedule this meeting: \"$title\"$who on $day?" to
+                            listOf("Add meeting", "Dismiss")
+                    }
                 }
                 ParsedIntent.CREATE_LOG -> {
                     val body = parsed.logBody?.takeIf { it.isNotBlank() } ?: safText
@@ -697,8 +734,13 @@ class DaybookViewModel(
                         com.sr2ma.daybook.domain.model.LogKind.DECISION -> "decision"
                         else                                            -> "note"
                     }
-                    "Logging a $kindLabel: \"${body.take(80)}\". Save it?" to
-                        listOf("Save", "Dismiss")
+                    if (guardrail == "FULL_AUTONOMY" || guardrail == "HYBRID") {
+                        commitParsedIntent(safText, parsed)
+                        "I've saved your $kindLabel: \"${body.take(80)}\"." to listOf("Dismiss")
+                    } else {
+                        "Sir, can I do that? — Log $kindLabel: \"${body.take(80)}\"?" to
+                            listOf("Save", "Dismiss")
+                    }
                 }
                 ParsedIntent.UNKNOWN -> {
                     // ── Stage 4: attempt LLM classification ──────────────────
@@ -720,6 +762,7 @@ class DaybookViewModel(
                                 // LLM succeeded — re-run the Stage 3 render path
                                 // with the LLM-produced ParseResult.
                                 val llmParsed = routeResult.result
+                                val llmGuardrail = syncPreferences?.globalAutonomyGuardrail ?: "ALWAYS_ASK"
                                 val (llmText, llmChips) = when (llmParsed.intent) {
                                     ParsedIntent.CREATE_TASK -> {
                                         val t = llmParsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
@@ -730,16 +773,26 @@ class DaybookViewModel(
                                             else -> ""
                                         }
                                         val dl = llmParsed.dueDate?.let { ", due $it" } ?: ""
-                                        "Got it — task: \"$t\"$pl$dl. Add it?" to
-                                            listOf("Add task", "Dismiss")
+                                        if (llmGuardrail == "FULL_AUTONOMY" || llmGuardrail == "HYBRID") {
+                                            commitParsedIntent(safText, llmParsed)
+                                            "I've added the task: \"$t\"$pl$dl." to listOf("Dismiss")
+                                        } else {
+                                            "Sir, can I do that? — Add task: \"$t\"$pl$dl?" to
+                                                listOf("Add task", "Dismiss")
+                                        }
                                     }
                                     ParsedIntent.CREATE_MEETING -> {
                                         val t = llmParsed.meetingTitle?.takeIf { it.isNotBlank() } ?: safText
                                         val who = if (llmParsed.meetingAttendees.isNotEmpty())
                                             " with ${llmParsed.meetingAttendees.joinToString(", ")}" else ""
                                         val day = llmParsed.dueDate ?: today
-                                        "Meeting: \"$t\"$who on $day. Add it?" to
-                                            listOf("Add meeting", "Dismiss")
+                                        if (llmGuardrail == "FULL_AUTONOMY") {
+                                            commitParsedIntent(safText, llmParsed)
+                                            "I've scheduled the meeting: \"$t\"$who on $day." to listOf("Dismiss")
+                                        } else {
+                                            "Sir, can I schedule this meeting: \"$t\"$who on $day?" to
+                                                listOf("Add meeting", "Dismiss")
+                                        }
                                     }
                                     ParsedIntent.CREATE_LOG -> {
                                         val b = llmParsed.logBody?.takeIf { it.isNotBlank() } ?: safText
@@ -749,8 +802,13 @@ class DaybookViewModel(
                                             com.sr2ma.daybook.domain.model.LogKind.DECISION -> "decision"
                                             else -> "note"
                                         }
-                                        "Logging a $k: \"${b.take(80)}\". Save it?" to
-                                            listOf("Save", "Dismiss")
+                                        if (llmGuardrail == "FULL_AUTONOMY" || llmGuardrail == "HYBRID") {
+                                            commitParsedIntent(safText, llmParsed)
+                                            "I've logged your $k: \"${b.take(80)}\"." to listOf("Dismiss")
+                                        } else {
+                                            "Sir, can I do that? — Log $k: \"${b.take(80)}\"?" to
+                                                listOf("Save", "Dismiss")
+                                        }
                                     }
                                     ParsedIntent.UNKNOWN -> {
                                         "I'm not sure what to do with that. What would you like?" to
@@ -1153,14 +1211,15 @@ class DaybookViewModel(
             search = state.taskSearch,
         )
 
+        val passes = repository.passes.value
         return state.copy(
             tasks = tasks,
             logEntries = logEntries,
             meetings = meetings,
             projects = projects,
-            passes = repository.passes.value,
+            passes = passes,
             taskProject = project,
-            board = TodayBuilder.build(tasks, meetings, logEntries, state.today),
+            board = TodayBuilder.build(tasks, meetings, logEntries, state.today, passes = passes),
             visibleTasks = visibleTasks,
             // Only paid for when the screen is actually grouped.
             taskGroups = if (state.groupByProject) {
@@ -1211,12 +1270,14 @@ class DaybookViewModel(
             repository: DaybookRepository,
             llmEngine: LlmEngine? = null,
             modelDownloader: ModelDownloader? = null,
+            syncPreferences: SyncPreferences? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 DaybookViewModel(
                     repository      = repository,
                     llmEngine       = llmEngine,
                     modelDownloader = modelDownloader,
+                    syncPreferences = syncPreferences,
                 )
             }
         }

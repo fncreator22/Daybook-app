@@ -2,6 +2,7 @@ package com.sr2ma.daybook.domain
 
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.TaskStatus
 import java.time.LocalDate
@@ -25,12 +26,13 @@ data class TodayBoard(
     val completedToday: Int = 0,
     /** Open tasks with no due date — shown as "Upcoming" (max 5 to keep screen light). */
     val upcoming: List<Task> = emptyList(),
+    val passes: List<Pass> = emptyList(),
 ) {
     /** True when there is genuinely nothing to show, so the empty state can take over. */
     val isEmpty: Boolean
         get() = overdue.isEmpty() && dueToday.isEmpty() && inProgress.isEmpty() &&
             meetings.isEmpty() && followUps.isEmpty() && log.isEmpty() &&
-            upcoming.isEmpty()
+            upcoming.isEmpty() && passes.isEmpty()
 
     /** Count of things still asking for attention, for the tab badge. */
     val openCount: Int get() = overdue.size + dueToday.size + followUps.size
@@ -52,6 +54,7 @@ object TodayBuilder {
         logEntries: List<LogEntry>,
         today: LocalDate,
         zone: ZoneId = ZoneId.systemDefault(),
+        passes: List<Pass> = emptyList(),
     ): TodayBoard {
         val overdue = mutableListOf<Task>()
         val dueToday = mutableListOf<Task>()
@@ -84,6 +87,10 @@ object TodayBuilder {
             }
         }
 
+        val activePasses = passes.filter { pass ->
+            pass.expiryDate == null || !pass.expiryDate.isBefore(today)
+        }.sortedBy { it.expiryDate ?: LocalDate.MAX }
+
         return TodayBoard(
             day = today,
             // Longest overdue first, then the loudest priority within a date.
@@ -112,6 +119,7 @@ object TodayBuilder {
             upcoming = upcoming
                 .sortedByDescending { it.priority.storedValue }
                 .take(5),
+            passes = activePasses,
         )
     }
 

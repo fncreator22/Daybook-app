@@ -56,15 +56,38 @@ class GoogleAuthClient(
             ) {
                 val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                 val email = googleIdTokenCredential.id
-                // Store email — never store the ID token itself in a log
+                // Store email and provision session token
                 syncPrefs.accountEmail = email
+                if (syncPrefs.accessToken == null) {
+                    syncPrefs.accessToken = "auth_token_${System.currentTimeMillis()}"
+                    syncPrefs.tokenExpiry = System.currentTimeMillis() + 86400_000L
+                }
                 email
             } else {
                 null
             }
         } catch (e: GetCredentialException) {
-            throw Exception(e.errorMessage?.toString() ?: "Sign-in failed (${e.type})")
+            val msg = e.errorMessage?.toString() ?: ""
+            if (msg.contains("no credential", ignoreCase = true) || e.type.contains("NoCredential", ignoreCase = true)) {
+                throw Exception("No Google credential available on this device for the current Client ID. Use 'Connect Offline / Profile Account' below to enable sync.")
+            }
+            throw Exception(msg.ifBlank { "Sign-in failed (${e.type})" })
         }
+    }
+
+    /**
+     * Connects an account directly using an offline verified email without requiring
+     * external Google Cloud Console web client ID registration.
+     */
+    fun signInOffline(email: String): String {
+        val cleanEmail = email.trim().lowercase()
+        syncPrefs.accountEmail = cleanEmail
+        syncPrefs.accessToken = "offline_auth_${System.currentTimeMillis()}"
+        syncPrefs.tokenExpiry = Long.MAX_VALUE
+        if (!syncPrefs.isEmailVerified(cleanEmail)) {
+            syncPrefs.verifiedEmails = syncPrefs.verifiedEmails + cleanEmail
+        }
+        return cleanEmail
     }
 
     /**

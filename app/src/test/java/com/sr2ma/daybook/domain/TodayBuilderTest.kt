@@ -240,4 +240,43 @@ class TodayBuilderTest {
         assertEquals(0, board.openCount)
         assertEquals(today, board.day)
     }
+
+    @Test
+    fun `passes are filtered to active and sorted by expiry date`() {
+        val activePass1 = com.sr2ma.daybook.domain.model.Pass(
+            id = 1,
+            title = "Flight",
+            category = com.sr2ma.daybook.domain.model.PassCategory.TRANSPORT,
+            barcodeValue = "ABC123",
+            barcodeFormat = "QR_CODE",
+            expiryDate = today.plusDays(2),
+        )
+        val activePass2 = com.sr2ma.daybook.domain.model.Pass(
+            id = 2,
+            title = "Gym",
+            category = com.sr2ma.daybook.domain.model.PassCategory.LOYALTY_CARD,
+            barcodeValue = "GYM456",
+            barcodeFormat = "CODE_128",
+            expiryDate = null,
+        )
+        val expiredPass = com.sr2ma.daybook.domain.model.Pass(
+            id = 3,
+            title = "Concert",
+            category = com.sr2ma.daybook.domain.model.PassCategory.EVENT_TICKET,
+            barcodeValue = "TIX789",
+            barcodeFormat = "QR_CODE",
+            expiryDate = today.minusDays(1),
+        )
+
+        val board = TodayBuilder.build(
+            tasks = emptyList(),
+            meetings = emptyList(),
+            logEntries = emptyList(),
+            today = today,
+            passes = listOf(expiredPass, activePass2, activePass1),
+        )
+
+        assertEquals(listOf(1L, 2L), board.passes.map { it.id })
+        assertFalse(board.isEmpty)
+    }
 }

@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -38,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -76,6 +78,8 @@ fun SettingsScreen(
     var askClearMemory by remember { mutableStateOf(false) }
     var askResetPrefs by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
+    var showProfileSheet by remember { mutableStateOf(false) }
+    var showHfTokenDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val syncState by syncViewModel.state.collectAsState()
@@ -113,7 +117,7 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_profile_section),
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
-            DaybookCard {
+            DaybookCard(onClick = { showProfileSheet = true }) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -122,7 +126,7 @@ fun SettingsScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(46.dp)
                             .background(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = CircleShape,
@@ -140,29 +144,48 @@ fun SettingsScreen(
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = syncState.userName ?: "User",
+                            text = syncState.userName ?: "Offline User",
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        Text(
-                            text = if (syncState.isSignedIn && syncState.accountEmail != null)
-                                syncState.accountEmail!!
-                            else
-                                stringResource(R.string.settings_profile_offline),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        val emailText = syncState.accountEmail ?: syncState.profilePrimaryEmail ?: "Offline Profile"
+                        val isVerified = syncViewModel.syncManager.syncPrefs.isEmailVerified(emailText)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 2.dp),
+                        ) {
+                            Text(
+                                text = emailText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            if (syncState.accountEmail != null || syncState.profilePrimaryEmail != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (isVerified) Color(0xFFE6F4EA) else MaterialTheme.colorScheme.errorContainer,
+                                ) {
+                                    Text(
+                                        text = if (isVerified) "VERIFIED" else "UNVERIFIED",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isVerified) Color(0xFF137333) else MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
-                    TextButton(onClick = { showEditNameDialog = true }) {
-                        Text(stringResource(R.string.settings_profile_edit_name))
+                    TextButton(onClick = { showProfileSheet = true }) {
+                        Text("Manage")
                     }
                 }
             }
 
             SectionHeader(
                 title = stringResource(R.string.settings_section_backup),
-                // SectionHeader carries no inset of its own, so a heading that
-                // should line up with the card text asks for one here.
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             ActionRow(
@@ -249,7 +272,20 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_ai_download_model),
                         body = stringResource(R.string.settings_ai_download_model_body),
                         enabled = !state.busy,
-                        onClick = { viewModel.downloadModel() },
+                        onClick = {
+                            val token = syncViewModel.syncManager.syncPrefs.huggingFaceToken
+                            viewModel.downloadModel(token = token)
+                        },
+                    )
+                    ActionRow(
+                        icon = R.drawable.ic_settings,
+                        title = "Hugging Face API Token",
+                        body = if (syncViewModel.syncManager.syncPrefs.huggingFaceToken != null)
+                            "Token configured (required for gated Gemma download)"
+                        else
+                            "Optional — tap to enter free HF token for gated model download",
+                        enabled = !state.busy,
+                        onClick = { showHfTokenDialog = true },
                     )
                     ActionRow(
                         icon = R.drawable.ic_import,
@@ -283,9 +319,17 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(top = 4.dp),
                             )
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 6.dp),
                                 horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                if (downloadError.contains("401") || downloadError.contains("Hugging Face", ignoreCase = true)) {
+                                    TextButton(onClick = { showHfTokenDialog = true }) {
+                                        Text("Set HF Token")
+                                    }
+                                }
                                 TextButton(onClick = { viewModel.dismissModelDownloadError() }) {
                                     Text("Dismiss")
                                 }
@@ -430,6 +474,66 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showEditNameDialog = false }) {
                     Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showProfileSheet) {
+        ProfileSheet(
+            syncPrefs = syncViewModel.syncManager.syncPrefs,
+            onProfileUpdated = { syncViewModel.refreshState() },
+            onDismiss = { showProfileSheet = false },
+        )
+    }
+
+    if (showHfTokenDialog) {
+        var tokenInput by remember {
+            mutableStateOf(syncViewModel.syncManager.syncPrefs.huggingFaceToken ?: "")
+        }
+        AlertDialog(
+            onDismissRequest = { showHfTokenDialog = false },
+            title = { Text("Hugging Face API Token") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Gemma 3 270M is a gated model on Hugging Face. Enter your free User Access Token (from huggingface.co/settings/tokens) with Gemma license accepted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = tokenInput,
+                        onValueChange = { tokenInput = it },
+                        label = { Text("Token (hf_...)") },
+                        placeholder = { Text("hf_xxxxxxxxxxxxxxxx") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val clean = tokenInput.trim().ifBlank { null }
+                    syncViewModel.syncManager.syncPrefs.huggingFaceToken = clean
+                    showHfTokenDialog = false
+                }) {
+                    Text("Save Token")
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (!syncViewModel.syncManager.syncPrefs.huggingFaceToken.isNullOrBlank()) {
+                        TextButton(onClick = {
+                            syncViewModel.syncManager.syncPrefs.huggingFaceToken = null
+                            tokenInput = ""
+                            showHfTokenDialog = false
+                        }) {
+                            Text("Clear", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(onClick = { showHfTokenDialog = false }) {
+                        Text("Cancel")
+                    }
                 }
             },
         )

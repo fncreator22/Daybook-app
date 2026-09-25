@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
             repository      = container.repository,
             llmEngine       = container.llmEngine,
             modelDownloader = container.modelDownloader,
+            syncPreferences = container.syncPreferences,
         )
     }
 

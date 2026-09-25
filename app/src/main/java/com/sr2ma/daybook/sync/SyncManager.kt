@@ -24,6 +24,10 @@ class SyncManager(
     val authClient: GoogleAuthClient,
 ) {
 
+    val networkTracker: NetworkTracker by lazy {
+        NetworkTracker(context, syncPrefs)
+    }
+
     // ── Auth ─────────────────────────────────────────────────────────────────
 
     suspend fun signIn(): String? = authClient.signIn()

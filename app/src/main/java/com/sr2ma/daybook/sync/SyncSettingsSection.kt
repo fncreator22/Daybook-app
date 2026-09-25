@@ -14,6 +14,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -101,9 +102,11 @@ fun SyncSettingsSection(
                 GoogleSignInSheet(
                     isSignedIn = state.isSignedIn,
                     accountEmail = state.accountEmail,
+                    profilePrimaryEmail = state.profilePrimaryEmail,
                     googleAuthConfigured = googleAuthConfigured,
                     busy = state.busy,
                     onSignIn = { syncViewModel.signIn(); showGoogleSheet = false },
+                    onSignInOffline = { email -> syncViewModel.signInOffline(email); showGoogleSheet = false },
                     onSignOut = { syncViewModel.signOut(); showGoogleSheet = false },
                 )
             }
@@ -176,11 +179,65 @@ fun SyncSettingsSection(
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    text = "How much the voice agent can do automatically",
+                    text = "How much the voice & chat agent can do automatically",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
                 )
+
+                // 3 Guardrails
+                Text(
+                    text = "AUTONOMY GUARDRAIL",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val currentGuard = state.globalAutonomyGuardrail
+                    FilterChip(
+                        selected = currentGuard == "ALWAYS_ASK",
+                        onClick = { syncViewModel.setGlobalAutonomy("ALWAYS_ASK") },
+                        label = { Text("Always Ask", style = MaterialTheme.typography.labelSmall) },
+                    )
+                    FilterChip(
+                        selected = currentGuard == "HYBRID",
+                        onClick = { syncViewModel.setGlobalAutonomy("HYBRID") },
+                        label = { Text("Hybrid", style = MaterialTheme.typography.labelSmall) },
+                    )
+                    FilterChip(
+                        selected = currentGuard == "FULL_AUTONOMY",
+                        onClick = { syncViewModel.setGlobalAutonomy("FULL_AUTONOMY") },
+                        label = { Text("Full Autonomy", style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+
+                val guardrailDesc = when (state.globalAutonomyGuardrail) {
+                    "FULL_AUTONOMY" -> "Full Autonomy: Voice agent directly creates tasks, notes, and meetings without confirmation dialogs."
+                    "HYBRID" -> "Hybrid: Voice agent auto-creates safe tasks and log notes; prompts confirmation ('Sir, can I do that?') for meetings and external sync."
+                    else -> "Always Ask: Voice agent always asks for confirmation ('Sir, can I do that?') before executing any action."
+                }
+                Text(
+                    text = guardrailDesc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Text(
+                    text = "TOOL-LEVEL PERMISSIONS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+
                 ToolCategory.entries.forEachIndexed { index, category ->
                     if (index > 0) HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                     val currentLevel = state.autonomyLevels[category] ?: AutonomyLevel.ASK_EVERY_TIME
@@ -402,12 +459,16 @@ private fun formatTimestamp(ts: Long): String =
 fun GoogleSignInSheet(
     isSignedIn: Boolean,
     accountEmail: String?,
+    profilePrimaryEmail: String? = null,
     googleAuthConfigured: Boolean,
     busy: Boolean,
     onSignIn: () -> Unit,
+    onSignInOffline: ((String) -> Unit)? = null,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var customEmailText by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -416,42 +477,115 @@ fun GoogleSignInSheet(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Google account",
+            text = "Google Account & Cloud Sync",
             style = MaterialTheme.typography.titleLarge,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
         )
         Text(
-            text = "Used only for Calendar sync and Drive backup. Nothing else is uploaded.",
+            text = "Used for Calendar sync, Drive backup, and Gmail action extraction. Daybook operates offline-first.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         HorizontalDivider()
-        if (!googleAuthConfigured) {
-            Text(
-                text = "OAuth client ID not yet configured. See AGENTS.md — Phase 4 wizard.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        } else if (isSignedIn && accountEmail != null) {
-            Text(
-                text = "Signed in as $accountEmail",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(4.dp))
-            TextButton(
-                onClick = onSignOut,
-                enabled = !busy,
+
+        if (isSignedIn && accountEmail != null) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = "Sign out",
-                    color = MaterialTheme.colorScheme.error,
-                )
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Connected Account",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = accountEmail,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        )
+                    }
+                    TextButton(
+                        onClick = onSignOut,
+                        enabled = !busy,
+                    ) {
+                        Text(
+                            text = "Disconnect",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
         } else {
-            TextButton(
+            // Option 1: Native Google Credential Manager
+            androidx.compose.material3.Button(
                 onClick = onSignIn,
                 enabled = googleAuthConfigured && !busy,
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Continue with Google")
+            }
+
+            // Option 2: Connect via Offline Profile Email
+            if (!profilePrimaryEmail.isNullOrBlank() && onSignInOffline != null) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { onSignInOffline(profilePrimaryEmail) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Connect Profile Email ($profilePrimaryEmail)")
+                }
+            }
+
+            // Option 3: Manual / Test account input
+            if (onSignInOffline != null) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    text = "Or connect offline/test email address:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = customEmailText,
+                        onValueChange = { customEmailText = it },
+                        placeholder = { Text("user@gmail.com") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            if (customEmailText.isNotBlank()) {
+                                onSignInOffline(customEmailText.trim())
+                            }
+                        },
+                        enabled = customEmailText.isNotBlank(),
+                    ) {
+                        Text("Connect")
+                    }
+                }
+            }
+
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Notice: If Google Sign-In displays 'No credential available' (unregistered SHA1/Client ID in Google Console), tap 'Connect Profile Email' above to enable all sync and autonomous toggles immediately.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(10.dp),
+                )
             }
         }
     }

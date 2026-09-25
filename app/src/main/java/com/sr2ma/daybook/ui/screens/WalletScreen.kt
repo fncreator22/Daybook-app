@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -67,6 +68,9 @@ fun WalletScreen(
     viewModel: DaybookViewModel,
     modifier: Modifier = Modifier,
 ) {
+    var viewingPass by remember { mutableStateOf<Pass?>(null) }
+    var showAddSheet by remember { mutableStateOf(false) }
+
     if (state.walletScanOpen) {
         CameraScreen(
             onScanResult = viewModel::onScanResult,
@@ -87,6 +91,43 @@ fun WalletScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item(key = "wallet-header") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            text = "My Wallet & Passes",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        )
+                        Text(
+                            text = "${state.passes.size} passes stored offline",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    androidx.compose.material3.Button(
+                        onClick = { showAddSheet = true },
+                        shape = MaterialTheme.shapes.medium,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_add),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Add")
+                    }
+                }
+            }
+
             itemsIndexed(state.passes, key = { _, pass -> pass.id }) { index, pass ->
                 var visible by remember { mutableStateOf(false) }
                 LaunchedEffect(pass.id) {
@@ -104,19 +145,52 @@ fun WalletScreen(
                     ) + fadeIn(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
                     PassRow(
+                        serial = index + 1,
                         pass = pass,
-                        onClick = { viewModel.editPass(pass) },
+                        onClick = { viewingPass = pass },
                     )
                 }
             }
         }
     }
+
+    if (showAddSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showAddSheet = false },
+            sheetState = sheetState,
+        ) {
+            WalletAddSheet(
+                onScan = { showAddSheet = false; viewModel.openWalletScanner() },
+                onManual = { category -> showAddSheet = false; viewModel.newPassManual(category) },
+            )
+        }
+    }
+
+    // Dedicated read-only Entry Pass view
+    viewingPass?.let { pass ->
+        EntryPassSheet(
+            pass = pass,
+            onEdit = { p ->
+                viewingPass = null
+                viewModel.editPass(p)
+            },
+            onDelete = { p ->
+                viewingPass = null
+                viewModel.deletePass(p)
+            },
+            onDismiss = { viewingPass = null },
+        )
+    }
 }
 
-// ── Pass row (Google Wallet style) ────────────────────────────────────────────
+// ── Pass row (Google Wallet style with Serial & Status) ──────────────────────
 
 @Composable
-private fun PassRow(pass: Pass, onClick: () -> Unit) {
+private fun PassRow(serial: Int, pass: Pass, onClick: () -> Unit) {
+    val today = LocalDate.now()
+    val isExpired = pass.expiryDate?.isBefore(today) == true
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -131,56 +205,81 @@ private fun PassRow(pass: Pass, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Circle icon background — matches Google Wallet style
+            // Circle icon background with category icon
             Surface(
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier.size(46.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                color = if (isExpired) MaterialTheme.colorScheme.surfaceVariant
+                else MaterialTheme.colorScheme.primaryContainer,
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         painter = painterResource(categoryIcon(pass.category)),
                         contentDescription = categoryLabel(pass.category),
-                        modifier = Modifier.size(22.dp),
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(24.dp),
+                        tint = if (isExpired) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = pass.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(1.dp))
-                // Category label
-                Text(
-                    text = categoryLabel(pass.category),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                // Expiry row
-                if (pass.expiryDate != null) {
-                    val today = LocalDate.now()
-                    val expired = pass.expiryDate.isBefore(today)
-                    val expiryText = buildString {
-                        if (expired) append(stringResource(R.string.pass_expired_label))
-                        else append(stringResource(R.string.pass_expires,
-                            "${pass.expiryDate.dayOfMonth} " +
-                            pass.expiryDate.month.name.lowercase().replaceFirstChar { it.uppercase() } +
-                            " ${pass.expiryDate.year}"))
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     Text(
-                        text = expiryText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (expired) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(top = 2.dp),
+                        text = "#$serial",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
                     )
+                    Text(
+                        text = pass.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // Status Badge
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (isExpired) MaterialTheme.colorScheme.errorContainer
+                        else MaterialTheme.colorScheme.tertiaryContainer,
+                    ) {
+                        Text(
+                            text = if (isExpired) "EXPIRED" else "ACTIVE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = if (isExpired) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                 }
-                // Barcode preview + balance in one row
+
+                Spacer(Modifier.height(3.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = categoryLabel(pass.category),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (pass.expiryDate != null) {
+                        Text(
+                            text = "• ${pass.expiryDate.dayOfMonth} ${pass.expiryDate.month.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isExpired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // Barcode snippet
                 val barcodeLine = pass.barcodeValue.take(16) +
                     if (pass.barcodeValue.length > 16) "\u2026" else ""
                 Row(
@@ -203,9 +302,9 @@ private fun PassRow(pass: Pass, onClick: () -> Unit) {
                 }
             }
 
-            // Chevron
+            // Arrow indicating clickable pass
             Icon(
-                painter = painterResource(R.drawable.ic_close),  // reuse rotate-able arrow
+                painter = painterResource(R.drawable.ic_close),
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

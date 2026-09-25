@@ -13,14 +13,21 @@ import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -193,30 +200,56 @@ fun CameraScreen(
                 }
             }
 
-            // Toolbar: back + gallery
+            // Toolbar: back button placed safely below status bar/camera notch
             Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(8.dp),
+                    .statusBarsPadding()
+                    .padding(top = 24.dp, start = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_close),
-                        contentDescription = stringResource(R.string.action_cancel),
-                    )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.padding(2.dp),
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_close),
+                            contentDescription = stringResource(R.string.action_cancel),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
 
-            Button(
-                onClick = {
-                    galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                },
+            // Bottom controls: Cancel & Gallery
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp),
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(24.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(stringResource(R.string.wallet_gallery_button))
+                OutlinedButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                    ),
+                ) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+
+                Button(
+                    onClick = {
+                        galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                ) {
+                    Text(stringResource(R.string.wallet_gallery_button))
+                }
             }
         }
     }

@@ -67,6 +67,16 @@ import com.sr2ma.daybook.domain.model.GmailMessage
 import com.sr2ma.daybook.ui.components.GlassCard
 import com.sr2ma.daybook.ui.theme.DaybookAccents
 import com.sr2ma.daybook.whatsapp.WhatsAppReplyHelper
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import com.sr2ma.daybook.ui.components.ConnectivityStatusDialog
+import com.sr2ma.daybook.ui.screens.EntryPassSheet
 import java.time.LocalDate
 import kotlinx.coroutines.delay
 
@@ -82,9 +92,38 @@ fun TodayScreen(
     state: DaybookUiState,
     viewModel: DaybookViewModel,
     userName: String? = null,
+    isOnline: Boolean = false,
+    connectionType: String = "Offline",
+    lastAccessFormatted: String = "Never (100% Offline)",
     modifier: Modifier = Modifier,
 ) {
     val board = state.board
+    var viewingPass by remember { mutableStateOf<Pass?>(null) }
+    var showConnectivityDialog by remember { mutableStateOf(false) }
+
+    if (showConnectivityDialog) {
+        ConnectivityStatusDialog(
+            isOnline = isOnline,
+            connectionType = connectionType,
+            lastAccessFormatted = lastAccessFormatted,
+            onDismiss = { showConnectivityDialog = false },
+        )
+    }
+
+    viewingPass?.let { pass ->
+        EntryPassSheet(
+            pass = pass,
+            onEdit = { passToEdit ->
+                viewingPass = null
+                viewModel.editPass(passToEdit)
+            },
+            onDelete = { passToDelete ->
+                viewingPass = null
+                viewModel.deletePass(passToDelete)
+            },
+            onDismiss = { viewingPass = null },
+        )
+    }
 
     LazyColumn(
         // The bottom inset clears the floating action button, which would otherwise
@@ -100,16 +139,185 @@ fun TodayScreen(
                 userName = userName,
             )
         }
+        item(key = "status-indicator") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    onClick = { showConnectivityDialog = true },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(
+                                    color = if (isOnline) Color(0xFF34A853) else Color(0xFF9AA0A6),
+                                    shape = CircleShape,
+                                )
+                        )
+                        Text(
+                            text = if (isOnline) "Online ($connectionType)" else "100% On-Device Offline",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        item(key = "dashboard-metrics") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Task stats card (Due Today / Overdue / In Progress)
+                GlassCard(
+                    modifier = Modifier.weight(1f),
+                    animatedSheen = false,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "Tasks",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column {
+                                Text(
+                                    text = "${board.dueToday.size}",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Text(
+                                    text = "Due Today",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (board.overdue.isNotEmpty()) {
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "${board.overdue.size}",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                    Text(
+                                        text = "Overdue",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
+                        if (board.inProgress.isNotEmpty()) {
+                            Text(
+                                text = "${board.inProgress.size} in progress",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                        }
+                    }
+                }
+
+                // Schedule & Passes card
+                GlassCard(
+                    modifier = Modifier.weight(1f),
+                    animatedSheen = false,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "Schedule & Passes",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column {
+                                Text(
+                                    text = "${board.meetings.size}",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Text(
+                                    text = "Meetings",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                val passCount = if (board.passes.isNotEmpty()) board.passes.size else state.passes.size
+                                Text(
+                                    text = "$passCount",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                                Text(
+                                    text = "Passes",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (board.completedToday > 0) {
+                            Text(
+                                text = "${board.completedToday} completed today",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = DaybookAccents.done.onContainer,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         item(key = "quick-add") {
             QuickAddField(onAdd = viewModel::quickAddTask)
         }
 
         // Active passes widget: horizontal chip row, View More + Add buttons
-        if (state.passes.isNotEmpty()) {
+        val passesToShow = if (board.passes.isNotEmpty()) board.passes else state.passes
+        if (passesToShow.isNotEmpty()) {
             item(key = "active-passes") {
                 ActivePassesWidget(
-                    passes = state.passes,
+                    passes = passesToShow,
                     today = state.today,
+                    onPassClick = { pass -> viewingPass = pass },
                     onViewMore = viewModel::openWalletTab,
                     onAdd = viewModel::openWalletAdd,
                 )
@@ -428,13 +636,15 @@ private fun QuickAddField(
 // â”€â”€ Active Passes Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
- * Shows up to 3 active (non-expired) passes as horizontal chips on the Today dashboard.
- * Two action buttons: "View more" â†’ Wallet tab, "+" â†’ add a new pass.
+ * Shows up to 4 active (non-expired) passes in a GlassCard on the Today dashboard.
+ * Tapping a pass chip opens the dedicated Entry Pass ticket sheet.
+ * Action buttons: "View more" → Wallet tab, "+" → add a new pass.
  */
 @Composable
 fun ActivePassesWidget(
     passes: List<Pass>,
     today: LocalDate,
+    onPassClick: (Pass) -> Unit = {},
     onViewMore: () -> Unit,
     onAdd: () -> Unit,
     modifier: Modifier = Modifier,
@@ -442,87 +652,102 @@ fun ActivePassesWidget(
     val activePasses = remember(passes, today) {
         passes
             .filter { it.expiryDate == null || !it.expiryDate.isBefore(today) }
-            .take(3)
+            .take(4)
     }
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(R.string.dashboard_passes_title),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onViewMore) {
-                    Text(stringResource(R.string.dashboard_passes_view_more))
-                }
-                FilledTonalIconButton(
-                    onClick = onAdd,
-                    modifier = Modifier.size(32.dp),
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        animatedSheen = false,
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_add),
-                        contentDescription = stringResource(R.string.cd_add_pass),
-                        modifier = Modifier.size(16.dp),
+                        painter = painterResource(R.drawable.ic_wallet),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.dashboard_passes_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
-            }
-        }
-
-        if (activePasses.isEmpty()) {
-            Text(
-                text = stringResource(R.string.dashboard_passes_empty),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
-        } else {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                itemsIndexed(activePasses, key = { _, p -> p.id }) { index, pass ->
-                    var visible by remember(pass.id) { mutableStateOf(false) }
-                    LaunchedEffect(pass.id) {
-                        delay(index * 60L)
-                        visible = true
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onViewMore) {
+                        Text(stringResource(R.string.dashboard_passes_view_more))
                     }
-                    AnimatedVisibility(
-                        visible = visible,
-                        enter = slideInVertically(
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMedium,
-                            ),
-                            initialOffsetY = { it / 2 },
-                        ) + fadeIn(),
+                    FilledTonalIconButton(
+                        onClick = onAdd,
+                        modifier = Modifier.size(32.dp),
                     ) {
-                        SuggestionChip(
-                            onClick = onViewMore,
-                            label = {
-                                Text(
-                                    text = pass.title,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                )
-                            },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(categoryIcon(pass.category)),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SuggestionChipDefaults.IconSize),
-                                )
-                            },
+                        Icon(
+                            painter = painterResource(R.drawable.ic_add),
+                            contentDescription = stringResource(R.string.cd_add_pass),
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
             }
+
+            if (activePasses.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.dashboard_passes_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                ) {
+                    itemsIndexed(activePasses, key = { _, p -> p.id }) { index, pass ->
+                        var visible by remember(pass.id) { mutableStateOf(false) }
+                        LaunchedEffect(pass.id) {
+                            delay(index * 60L)
+                            visible = true
+                        }
+                        AnimatedVisibility(
+                            visible = visible,
+                            enter = slideInVertically(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMedium,
+                                ),
+                                initialOffsetY = { it / 2 },
+                            ) + fadeIn(),
+                        ) {
+                            SuggestionChip(
+                                onClick = { onPassClick(pass) },
+                                label = {
+                                    Text(
+                                        text = pass.title,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                    )
+                                },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(categoryIcon(pass.category)),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SuggestionChipDefaults.IconSize),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(4.dp))
     }
 }
 

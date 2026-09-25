@@ -294,7 +294,15 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
                 // state -- which is what rememberLazyListState uses -- keyed by tab.
                 stateHolder.SaveableStateProvider(state.tab.name) {
                     when (state.tab) {
-                        DaybookTab.TODAY -> TodayScreen(state, viewModel, userName = syncState.userName, modifier = content)
+                        DaybookTab.TODAY -> TodayScreen(
+                            state = state,
+                            viewModel = viewModel,
+                            userName = syncState.userName,
+                            isOnline = syncState.isOnline,
+                            connectionType = syncState.connectionType,
+                            lastAccessFormatted = syncState.lastAccessFormatted,
+                            modifier = content,
+                        )
                         DaybookTab.TASKS -> TasksScreen(state, viewModel, content)
                         DaybookTab.LOG -> LogScreen(state, viewModel, content)
                         DaybookTab.MEETINGS -> MeetingsScreen(state, viewModel, content)
@@ -670,9 +678,15 @@ private fun VoiceResultSheet(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
             Text(
-                text = stringResource(R.string.voice_result_title),
-                style = MaterialTheme.typography.labelMedium,
+                text = "Sir, can I do that?",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = stringResource(R.string.voice_result_title),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(4.dp))
             Text(
