@@ -97,10 +97,6 @@ fun LogScreen(
                         SectionHeader(
                             title = dayLabel(logDay.day, state.today),
                             count = logDay.entries.size,
-                            // The list's contentPadding does not reach a header's
-                            // own text, so the inset is passed here rather than
-                            // baked into SectionHeader.
-                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
                     items(items = logDay.entries, key = { it.id }) { entry ->

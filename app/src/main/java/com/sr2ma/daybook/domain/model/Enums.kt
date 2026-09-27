@@ -85,6 +85,7 @@ enum class PassCategory(val storedValue: String) {
     GIFT_CARD("GIFT_CARD"),
     ID("ID"),
     HEALTH("HEALTH"),
+    DOCUMENT("DOCUMENT"),
     OTHER("OTHER"),
     ;
 

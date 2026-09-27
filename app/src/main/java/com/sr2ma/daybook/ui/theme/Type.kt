@@ -29,6 +29,7 @@ val DaybookTypography = Typography(
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         lineHeight = 26.sp,
+        fontFeatureSettings = "tnum",
     ),
     titleMedium = TextStyle(
         fontFamily = Sans,
@@ -57,6 +58,7 @@ val DaybookTypography = Typography(
         fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.3.sp,
+        fontFeatureSettings = "tnum",
     ),
     labelLarge = TextStyle(
         fontFamily = Sans,
@@ -64,6 +66,7 @@ val DaybookTypography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp,
+        fontFeatureSettings = "tnum",
     ),
     labelMedium = TextStyle(
         fontFamily = Sans,
@@ -71,6 +74,7 @@ val DaybookTypography = Typography(
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.4.sp,
+        fontFeatureSettings = "tnum",
     ),
     // Section headers use this, so it is deliberately wide-tracked and small.
     labelSmall = TextStyle(
@@ -79,5 +83,6 @@ val DaybookTypography = Typography(
         fontSize = 11.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.8.sp,
+        fontFeatureSettings = "tnum",
     ),
 )

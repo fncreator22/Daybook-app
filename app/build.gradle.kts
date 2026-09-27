@@ -154,4 +154,7 @@ dependencies {
     implementation(libs.credentials.play.services.auth)
     // Google ID: GoogleIdTokenCredential, GetGoogleIdOption.
     implementation(libs.googleid)
+
+    // Database encryption via SQLCipher 4.5.6 (Key in Android Keystore)
+    implementation(libs.sqlcipher.android)
 }

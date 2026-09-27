@@ -194,4 +194,69 @@ class NaturalLanguageParserTest {
         assertEquals("sign contract", result.taskTitle)
         assertEquals("projet", result.project)
     }
+
+    // ── Multi-clause & Conversational tests ───────────────────────────────────
+
+    @Test
+    fun `conversational greetings return CONVERSATION intent`() {
+        val hi = NaturalLanguageParser.parse("Hi how are you?")
+        assertEquals(ParsedIntent.CONVERSATION, hi.intent)
+        assertTrue(hi.conversationReply?.isNotBlank() == true)
+
+        val hello = NaturalLanguageParser.parse("hello!")
+        assertEquals(ParsedIntent.CONVERSATION, hello.intent)
+
+        val thanks = NaturalLanguageParser.parse("thank you")
+        assertEquals(ParsedIntent.CONVERSATION, thanks.intent)
+    }
+
+    @Test
+    fun `weekly engineering sync routes to CREATE_MEETING`() {
+        val result = NaturalLanguageParser.parse("Weekly Engineering Sync on Friday")
+        assertEquals(ParsedIntent.CREATE_MEETING, result.intent)
+    }
+
+    @Test
+    fun `day after tomorrow keyword sets due date 2 days out`() {
+        val today = java.time.LocalDate.of(2026, 9, 11)
+        val result = NaturalLanguageParser.parse("buy groceries day after tomorrow", referenceDate = today)
+
+        assertEquals(today.plusDays(2), result.dueDate)
+    }
+
+    @Test
+    fun `meeting title is cleaned and time is extracted`() {
+        val today = java.time.LocalDate.of(2026, 9, 11)
+        val result = NaturalLanguageParser.parse("Meeting with Product Design at 3pm", referenceDate = today)
+        assertEquals(ParsedIntent.CREATE_MEETING, result.intent)
+        assertEquals("Product Design", result.meetingTitle)
+        assertEquals(java.time.LocalTime.of(15, 0), result.meetingTime)
+        assertTrue(result.meetingAttendees.contains("Product Design"))
+    }
+
+    @Test
+    fun `relative times like at night extract proper local time`() {
+        val time = NaturalLanguageParser.extractTime("call sister at night")
+        assertEquals(java.time.LocalTime.of(20, 0), time)
+    }
+
+    @Test
+    fun `splitClauses splits compound multi-action utterances`() {
+        val input = "save two meetings tomorrow with Acme Corp and three tasks for day after tomorrow"
+        val clauses = NaturalLanguageParser.splitClauses(input)
+        assertTrue(clauses.size >= 2)
+
+        val listInput = "1. Call Alice tomorrow\n2. Review PR today\n3. Weekly sync on Friday"
+        val listClauses = NaturalLanguageParser.splitClauses(listInput)
+        assertEquals(3, listClauses.size)
+    }
+
+    @Test
+    fun `parseMulti produces multiple structured items from compound input`() {
+        val input = "call Alice tomorrow and finish the slides today and meeting with Bob on Friday"
+        val results = NaturalLanguageParser.parseMulti(input)
+        assertTrue(results.size >= 2)
+        assertTrue(results.any { it.intent == ParsedIntent.CREATE_TASK })
+        assertTrue(results.any { it.intent == ParsedIntent.CREATE_MEETING })
+    }
 }

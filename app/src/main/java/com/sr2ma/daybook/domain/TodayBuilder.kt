@@ -24,15 +24,17 @@ data class TodayBoard(
     val followUps: List<Meeting> = emptyList(),
     val log: List<LogEntry> = emptyList(),
     val completedToday: Int = 0,
+    val completedTasks: List<Task> = emptyList(),
     /** Open tasks with no due date — shown as "Upcoming" (max 5 to keep screen light). */
     val upcoming: List<Task> = emptyList(),
     val passes: List<Pass> = emptyList(),
+    val suggestions: List<AgentSuggestion> = emptyList(),
 ) {
     /** True when there is genuinely nothing to show, so the empty state can take over. */
     val isEmpty: Boolean
         get() = overdue.isEmpty() && dueToday.isEmpty() && inProgress.isEmpty() &&
             meetings.isEmpty() && followUps.isEmpty() && log.isEmpty() &&
-            upcoming.isEmpty() && passes.isEmpty()
+            upcoming.isEmpty() && passes.isEmpty() && completedTasks.isEmpty()
 
     /** Count of things still asking for attention, for the tab badge. */
     val openCount: Int get() = overdue.size + dueToday.size + followUps.size
@@ -60,6 +62,7 @@ object TodayBuilder {
         val dueToday = mutableListOf<Task>()
         val inProgress = mutableListOf<Task>()
         val upcoming = mutableListOf<Task>()
+        val completedTasks = mutableListOf<Task>()
         var completedToday = 0
 
         tasks.forEach { task ->
@@ -69,6 +72,7 @@ object TodayBuilder {
                         Dates.localDateOf(task.completedAt, zone) == today
                     ) {
                         completedToday++
+                        completedTasks += task
                     }
                 }
 
@@ -88,8 +92,10 @@ object TodayBuilder {
         }
 
         val activePasses = passes.filter { pass ->
-            pass.expiryDate == null || !pass.expiryDate.isBefore(today)
+            !pass.isArchived && (pass.expiryDate == null || !pass.expiryDate.isBefore(today))
         }.sortedBy { it.expiryDate ?: LocalDate.MAX }
+
+        val suggestions = AgentEngine.computeSuggestions(tasks, meetings, today)
 
         return TodayBoard(
             day = today,
@@ -115,11 +121,13 @@ object TodayBuilder {
             ),
             log = logEntries.filter { it.day == today }.sortedByDescending { it.createdAt },
             completedToday = completedToday,
+            completedTasks = completedTasks.sortedByDescending { it.completedAt ?: 0L },
             // Highest priority first; cap at 5 to keep Today screen scannable.
             upcoming = upcoming
                 .sortedByDescending { it.priority.storedValue }
                 .take(5),
             passes = activePasses,
+            suggestions = suggestions,
         )
     }
 

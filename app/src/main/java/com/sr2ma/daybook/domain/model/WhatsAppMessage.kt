@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.domain.model
+package com.sr2ma.daybook.domain.model
 
 /**
  * A single WhatsApp notification captured by [com.sr2ma.daybook.whatsapp.WhatsAppListenerService].

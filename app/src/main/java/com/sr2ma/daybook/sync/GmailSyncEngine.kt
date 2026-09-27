@@ -42,11 +42,15 @@ class GmailSyncEngine(
 
         // ── Offline Profile Mode: Extract actions across verified emails ──────────
         if (token.startsWith("offline_")) {
+            if (syncPrefs.sampleGmailCleared) {
+                syncPrefs.lastGmailSyncAt = System.currentTimeMillis()
+                return@withContext SyncResult.Success(fetchedCount = 0, actionableCount = 0)
+            }
             val verified = syncPrefs.verifiedEmails.ifEmpty {
                 setOfNotNull(syncPrefs.profilePrimaryEmail ?: syncPrefs.accountEmail)
             }
             if (verified.isEmpty()) {
-                return@withContext SyncResult.Error("No verified email accounts. Please add and verify your email via OTP in Profile.")
+                return@withContext SyncResult.Error("No verified email accounts. Please configure your email in Profile.")
             }
 
             var fetched = 0
@@ -56,17 +60,17 @@ class GmailSyncEngine(
             verified.forEachIndexed { accIdx, email ->
                 val sampleEmails = listOf(
                     Triple(
-                        "Task: Complete Q3 Roadmap Review by tomorrow",
+                        "[Sample] Task: Complete Q3 Roadmap Review by tomorrow",
                         "Hi team, please review and finalize the Q3 roadmap document by tomorrow afternoon.",
                         "Alex Morgan <alex@company.com>",
                     ),
                     Triple(
-                        "Meeting with Product Design at 3pm",
+                        "[Sample] Meeting with Product Design at 3pm",
                         "Let's sync to review the mobile navigation mockups at 3pm today.",
                         "Design Team <design@company.com>",
                     ),
                     Triple(
-                        "Weekly Engineering Sync on Friday",
+                        "[Sample] Weekly Engineering Sync on Friday",
                         "Reminder for our weekly engineering sync on Friday at 11am.",
                         "Eng Lead <lead@company.com>",
                     ),
@@ -223,7 +227,7 @@ class GmailSyncEngine(
 
         if (parseResult.intent == ParsedIntent.CREATE_MEETING) {
             val raw = parseResult.meetingTitle ?: candidate.take(60)
-            val clean = raw.replace(Regex("^(meeting:?\\s*)+", RegexOption.IGNORE_CASE), "").trim()
+            val clean = cleanMeetingTitleSuggestion(raw)
             return "Meeting: $clean"
         }
 
@@ -235,7 +239,7 @@ class GmailSyncEngine(
 
         if (hasActionMarker && parseResult.intent == ParsedIntent.CREATE_TASK) {
             val raw = parseResult.taskTitle ?: candidate.take(60)
-            val clean = raw.replace(Regex("^(task:?\\s*)+", RegexOption.IGNORE_CASE), "").trim()
+            val clean = raw.replace(Regex("^(task:?\\s*|\\[sample\\]\\s*)+", RegexOption.IGNORE_CASE), "").trim()
             return "Task: $clean"
         }
 
@@ -243,16 +247,25 @@ class GmailSyncEngine(
         val snippetResult = NaturalLanguageParser.parse(snippet.take(120), referenceDate)
         if (snippetResult.intent == ParsedIntent.CREATE_MEETING) {
             val raw = snippetResult.meetingTitle ?: snippet.take(50)
-            val clean = raw.replace(Regex("^(meeting:?\\s*)+", RegexOption.IGNORE_CASE), "").trim()
+            val clean = cleanMeetingTitleSuggestion(raw)
             return "Meeting: $clean"
         }
         if (snippetResult.dueDate != null && snippetResult.intent == ParsedIntent.CREATE_TASK) {
             val raw = snippetResult.taskTitle ?: snippet.take(50)
-            val clean = raw.replace(Regex("^(task:?\\s*)+", RegexOption.IGNORE_CASE), "").trim()
+            val clean = raw.replace(Regex("^(task:?\\s*|\\[sample\\]\\s*)+", RegexOption.IGNORE_CASE), "").trim()
             return "Task: $clean"
         }
 
         return null
+    }
+
+    private fun cleanMeetingTitleSuggestion(raw: String): String {
+        return raw.replace(Regex("^(meeting:?\\s*|\\[sample\\]\\s*|call:?\\s*|sync:?\\s*)", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^with\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+at\\s+\\d+.*$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+on\\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow).*$", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .ifEmpty { raw.trim() }
     }
 
     private fun cleanSenderName(from: String): String {

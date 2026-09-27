@@ -3,6 +3,7 @@ package com.sr2ma.daybook.ui.screens
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -41,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -48,10 +50,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
+import com.sr2ma.daybook.domain.AgentSuggestion
+import com.sr2ma.daybook.domain.BriefingWriter
 import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.domain.model.Pass
+import com.sr2ma.daybook.domain.model.SuggestionType
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.WhatsAppMessage
 import com.sr2ma.daybook.ui.DaybookUiState
@@ -81,6 +86,11 @@ import com.sr2ma.daybook.ui.components.ConnectivityStatusDialog
 import com.sr2ma.daybook.ui.screens.EntryPassSheet
 import java.time.LocalDate
 import kotlinx.coroutines.delay
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
+import com.sr2ma.daybook.domain.NaturalLanguageParser
+import com.sr2ma.daybook.domain.ParsedIntent
 
 /**
  * The landing screen: one scrollable day, bucketed by what it is asking of you.
@@ -104,6 +114,16 @@ fun TodayScreen(
     var viewingMeeting by remember { mutableStateOf<Meeting?>(null) }
     var viewingTask by remember { mutableStateOf<Task?>(null) }
     var showConnectivityDialog by remember { mutableStateOf(false) }
+    var showBriefingSheet by remember { mutableStateOf(false) }
+    var dismissedSuggestionKeys by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var completedExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val activeSuggestions = remember(board.suggestions, dismissedSuggestionKeys) {
+        board.suggestions.filter { suggestion ->
+            val key = "${suggestion.type}_${suggestion.relatedEntityType}_${suggestion.relatedEntityId}_${suggestion.body}"
+            !dismissedSuggestionKeys.contains(key)
+        }
+    }
 
     if (showConnectivityDialog) {
         ConnectivityStatusDialog(
@@ -114,7 +134,17 @@ fun TodayScreen(
         )
     }
 
-    viewingPass?.let { pass ->
+    if (showBriefingSheet) {
+        BriefingSheet(
+            board = board,
+            today = state.today,
+            userName = userName,
+            onDismiss = { showBriefingSheet = false },
+        )
+    }
+
+    val currentPass = viewingPass?.let { vp -> state.passes.find { it.id == vp.id } ?: vp }
+    currentPass?.let { pass ->
         EntryPassSheet(
             pass = pass,
             userName = userName,
@@ -126,11 +156,18 @@ fun TodayScreen(
                 viewingPass = null
                 viewModel.deletePass(passToDelete)
             },
+            onToggleFavorite = { passToFav ->
+                viewModel.toggleFavoritePass(passToFav.id)
+            },
+            onToggleArchive = { passToArchive ->
+                viewModel.toggleArchivePass(passToArchive.id)
+            },
             onDismiss = { viewingPass = null },
         )
     }
 
-    viewingMeeting?.let { meeting ->
+    val currentMeeting = viewingMeeting?.let { vm -> state.meetings.find { it.id == vm.id } ?: vm }
+    currentMeeting?.let { meeting ->
         MeetingCardSheet(
             meeting = meeting,
             today = state.today,
@@ -145,7 +182,8 @@ fun TodayScreen(
         )
     }
 
-    viewingTask?.let { task ->
+    val currentTask = viewingTask?.let { vt -> state.tasks.find { it.id == vt.id } ?: vt }
+    currentTask?.let { task ->
         TaskCardSheet(
             task = task,
             today = state.today,
@@ -209,6 +247,107 @@ fun TodayScreen(
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // Prominent Glass Pill button for Wallet
+                Surface(
+                    onClick = { viewModel.openWalletTab() },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_wallet),
+                            contentDescription = "Wallet",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        val activePassCount = state.passes.count { !it.isArchived }
+                        Text(
+                            text = "Wallet ($activePassCount)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+        item(key = "morning-briefing-card") {
+            val briefingSummary = remember(board) { BriefingWriter.generate(board) }
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showBriefingSheet = true }
+                    .padding(vertical = 2.dp),
+                animatedSheen = false,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_today),
+                                contentDescription = "Morning Briefing",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = "Morning Briefing",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = "• Tap to listen",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = briefingSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = { showBriefingSheet = true },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_mic),
+                            contentDescription = "Listen to briefing",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
@@ -342,6 +481,36 @@ fun TodayScreen(
             }
         }
 
+        if (activeSuggestions.isNotEmpty()) {
+            item(key = "active-suggestions") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    activeSuggestions.forEach { suggestion ->
+                        val key = "${suggestion.type}_${suggestion.relatedEntityType}_${suggestion.relatedEntityId}_${suggestion.body}"
+                        AgentSuggestionCard(
+                            suggestion = suggestion,
+                            onAction = {
+                                if (suggestion.relatedEntityType == "task" && suggestion.relatedEntityId != null) {
+                                    val targetTask = state.tasks.find { it.id == suggestion.relatedEntityId }
+                                    if (targetTask != null) viewingTask = targetTask
+                                } else if (suggestion.relatedEntityType == "meeting" && suggestion.relatedEntityId != null) {
+                                    val targetMeeting = state.meetings.find { it.id == suggestion.relatedEntityId }
+                                    if (targetMeeting != null) viewingMeeting = targetMeeting
+                                }
+                            },
+                            onDismiss = {
+                                dismissedSuggestionKeys = dismissedSuggestionKeys + key
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
         // Active passes widget: horizontal chip row, View More + Add buttons
         val passesToShow = if (board.passes.isNotEmpty()) board.passes else state.passes
         if (passesToShow.isNotEmpty()) {
@@ -358,7 +527,8 @@ fun TodayScreen(
 
         val hasSchedule = board.overdue.isNotEmpty() || board.dueToday.isNotEmpty() ||
             board.inProgress.isNotEmpty() || board.upcoming.isNotEmpty() ||
-            board.meetings.isNotEmpty() || board.followUps.isNotEmpty()
+            board.meetings.isNotEmpty() || board.followUps.isNotEmpty() ||
+            activeSuggestions.isNotEmpty() || board.completedTasks.isNotEmpty()
 
         if (!hasSchedule && board.log.isEmpty()) {
             item(key = "empty") {
@@ -454,8 +624,27 @@ fun TodayScreen(
             }
         }
         logSection(entries = board.log, today = state.today, viewModel = viewModel)
-        whatsAppSection(messages = state.recentWhatsAppMessages)
-        gmailSection(messages = state.recentGmailMessages, onConvert = viewModel::convertGmailAction, onDismiss = viewModel::dismissGmailMessage)
+        whatsAppSection(
+            messages = state.recentWhatsAppMessages,
+            onConvert = viewModel::convertWhatsAppAction,
+        )
+        gmailSection(
+            messages = state.recentGmailMessages,
+            onConvert = viewModel::convertGmailAction,
+            onDismiss = viewModel::dismissGmailMessage,
+            onClearSamples = viewModel::clearSampleGmailMessages,
+        )
+        if (board.completedTasks.isNotEmpty()) {
+            completedTodaySection(
+                tasks = board.completedTasks,
+                count = board.completedToday,
+                isExpanded = completedExpanded,
+                onToggleExpand = { completedExpanded = !completedExpanded },
+                today = state.today,
+                viewModel = viewModel,
+                onTaskClick = { task -> viewingTask = task },
+            )
+        }
     }
 }
 
@@ -474,9 +663,6 @@ private fun LazyListScope.logSection(
         SectionHeader(
             title = stringResource(R.string.today_section_log),
             count = entries.size.takeIf { it > 0 },
-            // The list's contentPadding does not reach a header's own text, so the
-            // inset is passed here rather than baked into SectionHeader.
-            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
     items(items = entries, key = { "log-${it.id}" }) { entry ->
@@ -491,55 +677,96 @@ private fun LazyListScope.logSection(
 
 /**
  * Recent WhatsApp messages, shown below the log when the notification reader is active.
- * Each card shows sender + preview and a "Reply" button that opens WhatsApp to the sender.
+ * Each card shows sender + preview, quick "+ Add Task" / "+ Add Meeting" if actionable,
+ * and a "Reply" button that opens WhatsApp to the sender.
  * Hidden entirely when the list is empty (reader off or no messages yet).
  */
-private fun LazyListScope.whatsAppSection(messages: List<WhatsAppMessage>) {
+private fun LazyListScope.whatsAppSection(
+    messages: List<WhatsAppMessage>,
+    onConvert: (WhatsAppMessage) -> Unit,
+) {
     if (messages.isEmpty()) return
     item(key = "whatsapp-header") {
         SectionHeader(
             title = "Messages",
             count = messages.size,
-            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
     items(items = messages, key = { "wa-${it.id}" }) { msg ->
-        WhatsAppMessageCard(msg)
+        WhatsAppMessageCard(msg = msg, onConvert = onConvert)
     }
 }
 
 @Composable
-private fun WhatsAppMessageCard(msg: WhatsAppMessage) {
+private fun WhatsAppMessageCard(
+    msg: WhatsAppMessage,
+    onConvert: (WhatsAppMessage) -> Unit,
+) {
     val context = LocalContext.current
+    val parsed = remember(msg.message) { NaturalLanguageParser.parse(msg.message) }
+    val isActionable = parsed.intent != ParsedIntent.UNKNOWN && parsed.intent != ParsedIntent.CONVERSATION
+
     DaybookCard {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text(
                     text = msg.sender,
                     style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = msg.message.take(80) + if (msg.message.length > 80) "…" else "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
+                if (isActionable) {
+                    AccentChip(
+                        text = if (parsed.intent == ParsedIntent.CREATE_MEETING) "Meeting" else "Task",
+                        accent = DaybookAccents.priorityMedium,
+                    )
+                }
             }
-            TextButton(
-                onClick = { WhatsAppReplyHelper.openReply(context, msg.sender, "") },
+            Text(
+                text = msg.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Reply")
+                if (isActionable) {
+                    Button(
+                        onClick = { onConvert(msg) },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(end = 8.dp),
+                    ) {
+                        Text(
+                            text = if (parsed.intent == ParsedIntent.CREATE_MEETING) "+ Add Meeting" else "+ Add Task",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = { WhatsAppReplyHelper.openReply(context, msg.sender, "") },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text("Reply", style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
     }
 }
+
 
 /**
  * A heading plus its rows, or nothing at all when there are no rows.
@@ -560,7 +787,6 @@ private fun <T> LazyListScope.boardSection(
         SectionHeader(
             title = stringResource(titleRes),
             count = rows.size,
-            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
     items(items = rows, key = { "$keyPrefix-${idOf(it)}" }) { row(it) }
@@ -740,14 +966,42 @@ private fun LazyListScope.gmailSection(
     messages: List<GmailMessage>,
     onConvert: (GmailMessage) -> Unit,
     onDismiss: (GmailMessage) -> Unit,
+    onClearSamples: () -> Unit,
 ) {
     if (messages.isEmpty()) return
     item(key = "gmail-header") {
-        SectionHeader(
-            title = "Emails & Actions",
-            count = messages.size,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 20.dp, bottom = 8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "EMAILS & ACTIONS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = " ${messages.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (messages.any { it.messageId.startsWith("offline_") }) {
+                TextButton(
+                    onClick = onClearSamples,
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = "Clear Samples",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
     }
     items(items = messages, key = { "gmail-${it.id}" }) { msg ->
         GmailMessageCard(msg = msg, onConvert = onConvert, onDismiss = onDismiss)
@@ -760,7 +1014,15 @@ private fun GmailMessageCard(
     onConvert: (GmailMessage) -> Unit,
     onDismiss: (GmailMessage) -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    val isSample = msg.messageId.startsWith("offline_")
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -771,14 +1033,32 @@ private fun GmailMessageCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = msg.sender,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f),
-                )
+                ) {
+                    Text(
+                        text = msg.sender,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (isSample) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.padding(start = 6.dp),
+                        ) {
+                            Text(
+                                text = "Sample",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                }
                 if (msg.suggestedAction != null) {
                     AccentChip(
                         text = "Action detected",
@@ -789,41 +1069,218 @@ private fun GmailMessageCard(
             Text(
                 text = msg.subject,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                maxLines = 1,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )
             if (msg.snippet.isNotBlank()) {
                 Text(
-                    text = msg.snippet.take(90) + if (msg.snippet.length > 90) "…" else "",
+                    text = if (expanded) msg.snippet else (msg.snippet.take(90) + if (msg.snippet.length > 90) "…" else ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            if (msg.suggestedAction != null && msg.actionedAt == null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            data = Uri.parse("https://mail.google.com")
+                            setPackage("com.google.android.gm")
+                        }
+                        try {
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://mail.google.com"))
+                            context.startActivity(webIntent)
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                 ) {
-                    TextButton(onClick = { onDismiss(msg) }) {
-                        Text("Dismiss")
-                    }
-                    Button(
-                        onClick = { onConvert(msg) },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    ) {
-                        Text(
-                            text = if (msg.suggestedAction.startsWith("Meeting:", ignoreCase = true)) "+ Add Meeting" else "+ Add Task",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
+                    Text(
+                        text = "Open Gmail",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+
+                if (msg.suggestedAction != null && msg.actionedAt == null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { onDismiss(msg) }) {
+                            Text("Dismiss", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Button(
+                            onClick = { onConvert(msg) },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = if (msg.suggestedAction.startsWith("Meeting:", ignoreCase = true)) "+ Add Meeting" else "+ Add Task",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AgentSuggestionCard(
+    suggestion: AgentSuggestion,
+    onAction: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        animatedSheen = false,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val label = when (suggestion.type) {
+                        SuggestionType.STALE_TASK -> "Stale Task Reminder"
+                        SuggestionType.FOLLOW_UP_DUE -> "Meeting Follow-up"
+                        SuggestionType.CADENCE_DUE -> "Recurring Task Due"
+                    }
+                    val iconRes = when (suggestion.type) {
+                        SuggestionType.STALE_TASK -> R.drawable.ic_clock
+                        SuggestionType.FOLLOW_UP_DUE -> R.drawable.ic_meetings
+                        SuggestionType.CADENCE_DUE -> R.drawable.ic_tasks
+                    }
+                    Icon(
+                        painter = painterResource(iconRes),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Text(
+                    text = suggestion.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (suggestion.relatedEntityId != null) {
+                    TextButton(
+                        onClick = onAction,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text("View", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = "Dismiss suggestion",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Collapsible section for tasks completed today, allowing users to view finished items
+ * and uncheck tasks if completed by mistake.
+ */
+private fun LazyListScope.completedTodaySection(
+    tasks: List<Task>,
+    count: Int,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    today: LocalDate,
+    viewModel: DaybookViewModel,
+    @Suppress("UNUSED_PARAMETER") onTaskClick: ((Task) -> Unit)? = null,
+) {
+    if (tasks.isEmpty()) return
+    item(key = "completed-today-header") {
+        val chevronRotation by animateFloatAsState(
+            targetValue = if (isExpanded) 180f else 0f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow,
+            ),
+            label = "completed_chevron_rotation",
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleExpand() }
+                .padding(top = 16.dp, bottom = 8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_chevron_down),
+                    contentDescription = if (isExpanded) "Collapse completed tasks" else "Expand completed tasks",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .rotate(chevronRotation),
+                )
+                Text(
+                    text = "COMPLETED TODAY ($count)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = if (isExpanded) "Hide" else "Show",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+    if (isExpanded) {
+        items(items = tasks, key = { "completed-${it.id}" }) { task ->
+            TaskRow(
+                task = task,
+                today = today,
+                onToggleDone = { viewModel.toggleTaskDone(task) },
+                onClick = { viewModel.toggleTaskDone(task) },
+            )
         }
     }
 }

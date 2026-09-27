@@ -115,7 +115,6 @@ fun SettingsScreen(
             // ── Profile ────────────────────────────────────────────────────────
             SectionHeader(
                 title = stringResource(R.string.settings_profile_section),
-                modifier = Modifier.padding(horizontal = 16.dp),
             )
             DaybookCard(onClick = { showProfileSheet = true }) {
                 Row(
@@ -186,7 +185,6 @@ fun SettingsScreen(
 
             SectionHeader(
                 title = stringResource(R.string.settings_section_backup),
-                modifier = Modifier.padding(horizontal = 16.dp),
             )
             ActionRow(
                 icon = R.drawable.ic_export,
@@ -210,10 +208,9 @@ fun SettingsScreen(
             // ── Phase 7: WhatsApp Notification Reader ─────────────────────────
             WhatsAppSettingsSection()
 
-            // ── On-device AI (Stage 5) ──────────────────────────────────────
+            // ── Advanced AI (Gemma 3 270M IT) ──────────────────────────────
             SectionHeader(
-                title = stringResource(R.string.settings_section_ai),
-                modifier = Modifier.padding(horizontal = 16.dp),
+                title = "Advanced AI (Gemma 3 270M IT)",
             )
             DaybookCard {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
@@ -229,6 +226,16 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
+                    )
+                    val hfToken = syncViewModel.syncManager.syncPrefs.huggingFaceToken
+                    Text(
+                        text = if (!hfToken.isNullOrBlank())
+                            "Hugging Face Bearer Auth: Configured (hf_••••${hfToken.takeLast(4)})"
+                        else
+                            "Hugging Face Bearer Auth: Not Configured (required for gated Gemma 3)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (!hfToken.isNullOrBlank()) Color(0xFF137333) else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -268,6 +275,16 @@ fun SettingsScreen(
                     }
                 } else {
                     ActionRow(
+                        icon = R.drawable.ic_settings,
+                        title = "Hugging Face Bearer Token",
+                        body = if (!syncViewModel.syncManager.syncPrefs.huggingFaceToken.isNullOrBlank())
+                            "Bearer auth active — tap to edit token or mirror URL"
+                        else
+                            "Required: enter your Hugging Face API token (hf_...)",
+                        enabled = !state.busy,
+                        onClick = { showHfTokenDialog = true },
+                    )
+                    ActionRow(
                         icon = R.drawable.ic_import,
                         title = stringResource(R.string.settings_ai_download_model),
                         body = stringResource(R.string.settings_ai_download_model_body),
@@ -277,16 +294,6 @@ fun SettingsScreen(
                             val customUrl = syncViewModel.syncManager.syncPrefs.customModelUrl
                             viewModel.downloadModel(token = token, customUrl = customUrl)
                         },
-                    )
-                    ActionRow(
-                        icon = R.drawable.ic_settings,
-                        title = "Model Download Settings & Token",
-                        body = if (syncViewModel.syncManager.syncPrefs.huggingFaceToken != null || syncViewModel.syncManager.syncPrefs.customModelUrl != null)
-                            "Configured (HF token or custom mirror set)"
-                        else
-                            "Optional — tap to enter HF token or direct mirror URL",
-                        enabled = !state.busy,
-                        onClick = { showHfTokenDialog = true },
                     )
                     ActionRow(
                         icon = R.drawable.ic_import,
@@ -357,7 +364,6 @@ fun SettingsScreen(
 
             SectionHeader(
                 title = stringResource(R.string.settings_section_data),
-                modifier = Modifier.padding(horizontal = 16.dp),
             )
             DaybookCard {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
@@ -378,7 +384,6 @@ fun SettingsScreen(
 
             SectionHeader(
                 title = stringResource(R.string.settings_section_about),
-                modifier = Modifier.padding(horizontal = 16.dp),
             )
             DaybookCard {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
@@ -483,6 +488,10 @@ fun SettingsScreen(
     if (showProfileSheet) {
         ProfileSheet(
             syncPrefs = syncViewModel.syncManager.syncPrefs,
+            taskCount = state.tasks.size,
+            meetingCount = state.meetings.size,
+            logCount = state.logEntries.size,
+            passCount = state.passes.size,
             onProfileUpdated = { syncViewModel.refreshState() },
             onDismiss = { showProfileSheet = false },
         )
@@ -497,18 +506,18 @@ fun SettingsScreen(
         }
         AlertDialog(
             onDismissRequest = { showHfTokenDialog = false },
-            title = { Text("Model Download Configuration") },
+            title = { Text("Hugging Face Bearer Token (Gemma 3 270M IT)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Gemma 3 270M is gated on Hugging Face. You can enter your free HF token or supply a custom mirror / CDN URL.",
+                        text = "Gemma 3 270M IT is a gated model hosted on Hugging Face (litert-community/gemma-3-270m-it). Under Gemma Terms of Use, downloading weights requires an authenticated Bearer token (hf_...). The model is verified with SHA-256 before activation.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedTextField(
                         value = tokenInput,
                         onValueChange = { tokenInput = it },
-                        label = { Text("Hugging Face Token (hf_...)") },
+                        label = { Text("Hugging Face Bearer Token (hf_...)") },
                         placeholder = { Text("hf_xxxxxxxxxxxxxxxx") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),

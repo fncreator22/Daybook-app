@@ -23,7 +23,7 @@ import android.database.sqlite.SQLiteOpenHelper
  *   v4 Ã¢â€ â€™ v5: passes table (barcode wallet)
  *   v5 Ã¢â€ â€™ v6: meetings + tasks Ã¢â‚¬â€ gcal_event_id, sync_status, tasks.calendar_sync_enabled
  */
-class DaybookDatabase(context: Context) :
+class DaybookDatabase(val context: Context) :
     SQLiteOpenHelper(context.applicationContext, DATABASE_NAME, null, DATABASE_VERSION) {
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -46,11 +46,12 @@ class DaybookDatabase(context: Context) :
         if (oldVersion < 8) MIGRATIONS_V8.forEach(db::execSQL)
         if (oldVersion < 9) MIGRATIONS_V9.forEach(db::execSQL)
         if (oldVersion < 10) MIGRATIONS_V10.forEach(db::execSQL)
+        if (oldVersion < 11) MIGRATIONS_V11.forEach(db::execSQL)
     }
 
     companion object {
         const val DATABASE_NAME = "daybook.db"
-        const val DATABASE_VERSION = 10
+        const val DATABASE_VERSION = 11
 
         const val TABLE_MEETINGS = "meetings"
         const val TABLE_TASKS = "tasks"
@@ -130,6 +131,8 @@ class DaybookDatabase(context: Context) :
                 expiry_date TEXT,
                 balance TEXT,
                 image_path TEXT,
+                is_favorited INTEGER NOT NULL DEFAULT 0,
+                is_archived INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )
@@ -172,6 +175,8 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX idx_meetings_day ON meetings(day)",
             "CREATE INDEX idx_meetings_next_touch ON meetings(next_touch)",
             "CREATE INDEX idx_passes_category ON passes(category)",
+            "CREATE INDEX IF NOT EXISTS idx_passes_is_favorited ON passes(is_favorited)",
+            "CREATE INDEX IF NOT EXISTS idx_passes_is_archived ON passes(is_archived)",
             "CREATE INDEX idx_whatsapp_sender ON whatsapp_messages(sender)",
             "CREATE INDEX idx_whatsapp_received ON whatsapp_messages(received_at)",
             "CREATE INDEX idx_kg_edges_from ON kg_edges(from_node)",
@@ -347,6 +352,14 @@ class DaybookDatabase(context: Context) :
             "CREATE INDEX IF NOT EXISTS idx_gmail_received ON gmail_messages(received_at DESC)",
         )
 
+        /** v10 → v11: wallet pass favorites and archiving support */
+        val MIGRATIONS_V11: List<String> = listOf(
+            "ALTER TABLE passes ADD COLUMN is_favorited INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE passes ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0",
+            "CREATE INDEX IF NOT EXISTS idx_passes_is_favorited ON passes(is_favorited)",
+            "CREATE INDEX IF NOT EXISTS idx_passes_is_archived ON passes(is_archived)",
+        )
+
         @Volatile private var instance: DaybookDatabase? = null
 
         /**
@@ -358,6 +371,99 @@ class DaybookDatabase(context: Context) :
             instance ?: synchronized(this) {
                 instance ?: DaybookDatabase(context.applicationContext).also { instance = it }
             }
+
+        /**
+         * Checks if SQLCipher native libraries are available in this runtime environment.
+         */
+        fun isSqlCipherAvailable(context: Context? = null): Boolean {
+            return try {
+                System.loadLibrary("sqlcipher")
+                true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+    }
+
+    /**
+     * Retrieves the 256-bit database encryption key securely managed via Android Keystore.
+     */
+    fun getDatabasePassphrase(): ByteArray = DatabaseKeyManager.getOrCreateDatabaseKey(context)
+
+    /**
+     * Checks if the physical database file is encrypted or plaintext SQLite.
+     * Plaintext SQLite files start with the 16-byte header: "SQLite format 3\0".
+     * SQLCipher encrypted files do not contain this plaintext header.
+     */
+    fun isEncrypted(): Boolean {
+        val dbFile = context.getDatabasePath(DATABASE_NAME)
+        return isEncrypted(dbFile)
+    }
+
+    fun isEncrypted(file: java.io.File): Boolean {
+        if (!file.exists() || file.length() < 16) return false
+        val header = ByteArray(16)
+        return try {
+            file.inputStream().use { it.read(header) }
+            val sqliteHeader = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+            !header.contentEquals(sqliteHeader)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Migrates a legacy plaintext database file to an encrypted SQLCipher database if native
+     * SQLCipher libraries are available and the database is currently plaintext.
+     *
+     * Returns true if the database is encrypted or successfully migrated, false otherwise.
+     */
+    fun migratePlaintextToEncrypted(): Boolean {
+        val dbFile = context.getDatabasePath(DATABASE_NAME)
+        if (!dbFile.exists() || isEncrypted(dbFile)) return true
+        if (!isSqlCipherAvailable(context)) return false
+
+        val passphrase = getDatabasePassphrase()
+        return try {
+            val encryptedTemp = java.io.File(dbFile.parentFile, "$DATABASE_NAME.enc_tmp")
+            if (encryptedTemp.exists()) encryptedTemp.delete()
+
+            val dbClass = Class.forName("net.zetetic.database.sqlcipher.SQLiteDatabase")
+            val openMethod = dbClass.getMethod(
+                "openOrCreateDatabase",
+                java.io.File::class.java,
+                Class.forName("net.zetetic.database.sqlcipher.SQLiteDatabase\$CursorFactory"),
+            )
+            val plaintextDb = openMethod.invoke(null, dbFile, null)
+            val rawExecMethod = dbClass.getMethod("rawExecSQL", String::class.java)
+            val closeMethod = dbClass.getMethod("close")
+
+            val hexKey = passphrase.joinToString("") { "%02x".format(it) }
+            rawExecMethod.invoke(plaintextDb, "ATTACH DATABASE '${encryptedTemp.absolutePath}' AS encrypted KEY \"x'$hexKey'\";")
+            rawExecMethod.invoke(plaintextDb, "SELECT sqlcipher_export('encrypted');")
+            rawExecMethod.invoke(plaintextDb, "DETACH DATABASE encrypted;")
+            closeMethod.invoke(plaintextDb)
+
+            // Atomic rename
+            val backupPlaintext = java.io.File(dbFile.parentFile, "$DATABASE_NAME.plaintext_bak")
+            if (backupPlaintext.exists()) backupPlaintext.delete()
+            if (dbFile.renameTo(backupPlaintext)) {
+                if (encryptedTemp.renameTo(dbFile)) {
+                    backupPlaintext.delete()
+                    true
+                } else {
+                    backupPlaintext.renameTo(dbFile)
+                    false
+                }
+            } else {
+                encryptedTemp.delete()
+                false
+            }
+        } catch (_: Throwable) {
+            false
+        } finally {
+            DatabaseKeyManager.wipe(passphrase)
+        }
     }
 }
 

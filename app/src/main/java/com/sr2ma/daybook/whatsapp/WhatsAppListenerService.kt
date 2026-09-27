@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.whatsapp
+package com.sr2ma.daybook.whatsapp
 
 import android.content.ComponentName
 import android.content.Context
@@ -68,6 +68,46 @@ class WhatsAppListenerService : NotificationListenerService() {
 
         scope.launch {
             dao?.insert(msg)
+
+            // Extract action item via NaturalLanguageParser
+            val parsed = com.sr2ma.daybook.domain.NaturalLanguageParser.parse(text)
+            if (parsed.intent == com.sr2ma.daybook.domain.ParsedIntent.CREATE_TASK ||
+                parsed.intent == com.sr2ma.daybook.domain.ParsedIntent.CREATE_MEETING
+            ) {
+                if (parsed.priority == com.sr2ma.daybook.domain.model.Priority.URGENT ||
+                    parsed.priority == com.sr2ma.daybook.domain.model.Priority.HIGH ||
+                    parsed.intent == com.sr2ma.daybook.domain.ParsedIntent.CREATE_MEETING
+                ) {
+                    val notifManager = com.sr2ma.daybook.notifications.ReminderNotificationManager
+                    notifManager.initChannels(applicationContext)
+                    val nm = androidx.core.app.NotificationManagerCompat.from(applicationContext)
+                    val intent = android.content.Intent(applicationContext, com.sr2ma.daybook.MainActivity::class.java).apply {
+                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
+                    val pi = android.app.PendingIntent.getActivity(
+                        applicationContext,
+                        (msg.receivedAt % 100000).toInt(),
+                        intent,
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+                    )
+                    val actionLabel = if (parsed.intent == com.sr2ma.daybook.domain.ParsedIntent.CREATE_MEETING)
+                        "Meeting detected: ${parsed.meetingTitle ?: text.take(40)}"
+                    else
+                        "Action item: ${parsed.taskTitle ?: text.take(40)}"
+
+                    val notif = androidx.core.app.NotificationCompat.Builder(applicationContext, notifManager.CHANNEL_INGESTION)
+                        .setSmallIcon(com.sr2ma.daybook.R.drawable.ic_today)
+                        .setContentTitle("WhatsApp from $title")
+                        .setContentText(actionLabel)
+                        .setContentIntent(pi)
+                        .setAutoCancel(true)
+                        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+                        .build()
+                    try {
+                        nm.notify((30000 + (msg.receivedAt % 10000)).toInt(), notif)
+                    } catch (_: SecurityException) {}
+                }
+            }
         }
     }
 

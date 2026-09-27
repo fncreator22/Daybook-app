@@ -50,6 +50,8 @@ object CadenceEngine {
             cadenceParentId = task.id,
             createdAt = now,
             updatedAt = now,
+            gcalEventId = null,
+            syncStatus = if (task.calendarSyncEnabled) com.sr2ma.daybook.domain.model.SyncStatus.PENDING_SYNC else com.sr2ma.daybook.domain.model.SyncStatus.LOCAL_ONLY,
         )
     }
 

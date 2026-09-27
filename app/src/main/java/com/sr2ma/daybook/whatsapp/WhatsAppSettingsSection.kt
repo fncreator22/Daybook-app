@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.whatsapp
+package com.sr2ma.daybook.whatsapp
 
 import android.content.Context
 import androidx.compose.foundation.layout.Column
@@ -45,10 +45,13 @@ fun WhatsAppSettingsSection() {
     var showOnboarding by remember { mutableStateOf(false) }
     var showPermissionRationale by remember { mutableStateOf(false) }
 
+    var showRestrictedHelp by remember { mutableStateOf(false) }
+
+    val hasPermission = WhatsAppListenerService.isPermissionGranted(context)
+
     Spacer(Modifier.height(8.dp))
     SectionHeader(
         title = "WhatsApp Reader",
-        modifier = Modifier.padding(horizontal = 16.dp),
     )
     DaybookCard {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
@@ -61,10 +64,20 @@ fun WhatsAppSettingsSection() {
                         text = "Capture incoming messages",
                         style = MaterialTheme.typography.bodyLarge,
                     )
+                    val statusText = when {
+                        !enabled -> "Off — tap to enable"
+                        !hasPermission -> "Permission needed — notification access blocked"
+                        else -> "Active — reading WhatsApp notifications"
+                    }
+                    val statusColor = when {
+                        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                        !hasPermission -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.primary
+                    }
                     Text(
-                        text = if (enabled) "Reading WhatsApp notifications" else "Off — tap to enable",
+                        text = statusText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = statusColor,
                     )
                 }
                 Switch(
@@ -78,6 +91,31 @@ fun WhatsAppSettingsSection() {
                         }
                     },
                 )
+            }
+
+            if (enabled && !hasPermission) {
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = { showPermissionRationale = true },
+                    modifier = Modifier.align(Alignment.Start),
+                ) {
+                    Text(
+                        text = "Grant Notification Access / Fix Restricted Settings",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(4.dp))
+                TextButton(
+                    onClick = { showRestrictedHelp = true },
+                    modifier = Modifier.align(Alignment.Start),
+                ) {
+                    Text(
+                        text = "Restricted settings issue on Android 13+? Tap for help",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
@@ -120,7 +158,8 @@ fun WhatsAppSettingsSection() {
             text = {
                 Text(
                     "On the next screen: find Daybook in the list and toggle it on. " +
-                    "This lets Daybook read notification text from WhatsApp.",
+                    "This lets Daybook read notification text from WhatsApp.\n\n" +
+                    "Note: If Android shows 'Restricted setting' or blocks the toggle, tap 'Fix Restricted Settings'.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -131,7 +170,43 @@ fun WhatsAppSettingsSection() {
                 }) { Text("Open Settings") }
             },
             dismissButton = {
-                TextButton(onClick = { showPermissionRationale = false }) { Text("Later") }
+                TextButton(onClick = {
+                    showPermissionRationale = false
+                    showRestrictedHelp = true
+                }) { Text("Fix Restricted Settings") }
+            },
+        )
+    }
+
+    if (showRestrictedHelp) {
+        AlertDialog(
+            onDismissRequest = { showRestrictedHelp = false },
+            title = { Text("Allow Restricted Settings (Android 13+)") },
+            text = {
+                Text(
+                    "Android restricts notification access for sideloaded apps by default with the message:\n" +
+                    "\"Restricted setting: For your security, this setting is currently unavailable.\"\n\n" +
+                    "To allow access:\n" +
+                    "1. Tap 'Open App Info' below.\n" +
+                    "2. In the top-right corner of the App info page, tap the 3 dots (⋮).\n" +
+                    "3. Tap 'Allow restricted settings' and confirm with your PIN/fingerprint.\n" +
+                    "4. Return here and tap 'Open Notification Access' to toggle Daybook ON.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = android.net.Uri.fromParts("package", context.packageName, null)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }) { Text("1. Open App Info") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    WhatsAppListenerService.openPermissionSettings(context)
+                }) { Text("2. Open Notification Access") }
             },
         )
     }

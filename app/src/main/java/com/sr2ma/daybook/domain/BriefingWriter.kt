@@ -12,6 +12,8 @@ import com.sr2ma.daybook.domain.model.LogKind
  */
 object BriefingWriter {
 
+    fun generate(board: TodayBoard): String = write(board)
+
     fun write(board: TodayBoard): String {
         if (board.isEmpty && board.completedToday == 0) {
             return "Your day is clear. Nothing on your agenda, no meetings, no follow-ups."

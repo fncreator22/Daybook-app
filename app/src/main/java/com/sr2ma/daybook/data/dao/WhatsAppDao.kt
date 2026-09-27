@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.data.dao
+package com.sr2ma.daybook.data.dao
 
 import android.content.ContentValues
 import android.database.Cursor
@@ -59,6 +59,10 @@ class WhatsAppDao(private val db: DaybookDatabase) {
         ).use { c -> while (c.moveToNext()) result.add(c.getString(0)) }
         return result
     }
+
+    fun delete(id: Long): Int = db.writableDatabase.delete(
+        DaybookDatabase.TABLE_WHATSAPP, "id = ?", arrayOf(id.toString())
+    )
 
     fun deleteAll(): Int = db.writableDatabase.delete(DaybookDatabase.TABLE_WHATSAPP, null, null)
 

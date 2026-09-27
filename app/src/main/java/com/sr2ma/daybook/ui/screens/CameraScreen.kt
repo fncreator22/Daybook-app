@@ -53,6 +53,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.PassParser
 import com.sr2ma.daybook.domain.ScanResult
+import com.sr2ma.daybook.domain.model.PassCategory
 
 /**
  * Full-screen camera viewfinder that detects barcodes.
@@ -98,29 +99,55 @@ fun CameraScreen(
     // ── Gallery picker (grilling Q2: also support static images) ─────────────
     var scanHandled by remember { mutableStateOf(false) }
 
+    val handleUri: (Uri?) -> Unit = { uri ->
+        if (uri != null) {
+            val scanner = BarcodeScanning.getClient()
+            val inputImage = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+            scanner.process(inputImage)
+                .addOnSuccessListener { barcodes ->
+                    if (barcodes.isNotEmpty()) {
+                        val barcode = if (barcodes.size == 1) barcodes.first() else {
+                            val areas = barcodes.map {
+                                val r = it.boundingBox
+                                Triple(it.rawValue ?: "", formatName(it.format), if (r != null) r.width() * r.height() else 0)
+                            }
+                            barcodes[PassParser.pickLargest(areas)]
+                        }
+                        val result = PassParser.parse(
+                            barcodeValue = barcode.rawValue ?: "",
+                            barcodeFormat = formatName(barcode.format),
+                        )
+                        onScanResult(result)
+                    } else {
+                        // OCR text fallback for non-barcode documents/passes
+                        val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                        textRecognizer.process(inputImage)
+                            .addOnSuccessListener { visionText ->
+                                val text = visionText.text.trim()
+                                if (text.isNotBlank()) {
+                                    val firstLine = text.lines().firstOrNull { it.isNotBlank() }?.take(40) ?: "Document"
+                                    val result = ScanResult(
+                                        barcodeValue = "",
+                                        barcodeFormat = "DOCUMENT",
+                                        ocrText = text,
+                                        suggestedTitle = firstLine,
+                                        suggestedCategory = PassCategory.DOCUMENT,
+                                    )
+                                    onScanResult(result)
+                                }
+                            }
+                    }
+                }
+        }
+    }
+
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val scanner = BarcodeScanning.getClient()
-        val inputImage = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
-        scanner.process(inputImage)
-            .addOnSuccessListener { barcodes ->
-                if (barcodes.isEmpty()) return@addOnSuccessListener
-                val barcode = if (barcodes.size == 1) barcodes.first() else {
-                    val areas = barcodes.map {
-                        val r = it.boundingBox
-                        Triple(it.rawValue ?: "", formatName(it.format), if (r != null) r.width() * r.height() else 0)
-                    }
-                    barcodes[PassParser.pickLargest(areas)]
-                }
-                val result = PassParser.parse(
-                    barcodeValue = barcode.rawValue ?: return@addOnSuccessListener,
-                    barcodeFormat = formatName(barcode.format),
-                )
-                onScanResult(result)
-            }
-    }
+    ) { uri -> handleUri(uri) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri -> handleUri(uri) }
 
     // ── Camera controller ────────────────────────────────────────────────────
     val barcodeScanner = remember { BarcodeScanning.getClient() }
@@ -243,12 +270,23 @@ fun CameraScreen(
                     Text(stringResource(R.string.action_cancel))
                 }
 
-                Button(
-                    onClick = {
-                        galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
-                ) {
-                    Text(stringResource(R.string.wallet_gallery_button))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { filePickerLauncher.launch("image/*") },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                        ),
+                    ) {
+                        Text("Files")
+                    }
+
+                    Button(
+                        onClick = {
+                            galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                    ) {
+                        Text(stringResource(R.string.wallet_gallery_button))
+                    }
                 }
             }
         }

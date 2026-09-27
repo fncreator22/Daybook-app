@@ -216,4 +216,14 @@ class BackupCodecTest {
         val decoded = codec.decode(file)
         assertTrue(decoded.passes.isEmpty())
     }
+
+    @Test
+    fun `pass favorites and archive flags round trip correctly`() {
+        val favoritedAndArchivedPass = pass.copy(id = 88L, isFavorited = true, isArchived = true)
+        val snap = Snapshot(passes = listOf(favoritedAndArchivedPass))
+        val decoded = codec.decode(codec.encode(snap))
+        val decodedPass = decoded.passes.single()
+        assertTrue(decodedPass.isFavorited)
+        assertTrue(decodedPass.isArchived)
+    }
 }

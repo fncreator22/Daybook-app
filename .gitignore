@@ -24,3 +24,7 @@ app/src/main/jniLibs/arm64-v8a/libsqlitevec.so
 # Gemma 270M model file (~250-300 MB, downloaded on-device by ModelDownloader — never bundled)
 *.litertlm
 *.litertlm.tmp
+
+# Python cache
+__pycache__/
+*.py[cod]

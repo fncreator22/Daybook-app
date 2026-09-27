@@ -76,11 +76,13 @@ fun EntryPassSheet(
     userName: String? = null,
     onEdit: (Pass) -> Unit,
     onDelete: (Pass) -> Unit,
+    onToggleFavorite: ((Pass) -> Unit)? = null,
+    onToggleArchive: ((Pass) -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    var isFavorite by remember { mutableStateOf(false) }
+    var isFavorite by remember(pass.isFavorited) { mutableStateOf(pass.isFavorited) }
     var showMenu by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
@@ -112,7 +114,10 @@ fun EntryPassSheet(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { isFavorite = !isFavorite }) {
+                    IconButton(onClick = {
+                        isFavorite = !isFavorite
+                        onToggleFavorite?.invoke(pass)
+                    }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_star),
                             contentDescription = "Favorite",
@@ -140,6 +145,14 @@ fun EntryPassSheet(
                                 onClick = {
                                     showMenu = false
                                     onEdit(pass)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (pass.isArchived) "Unarchive pass" else "Archive pass") },
+                                onClick = {
+                                    showMenu = false
+                                    onToggleArchive?.invoke(pass)
+                                    onDismiss()
                                 },
                             )
                             DropdownMenuItem(

@@ -84,6 +84,7 @@ class DaybookApplication : Application() {
         super.onCreate()
         // Create notification channels before any worker fires (idempotent).
         BriefingNotificationWorker.createChannels(this)
+        com.sr2ma.daybook.notifications.ReminderNotificationManager.initChannels(this)
         // Schedule nightly rule-engine + optional AI job.
         NightlyAgentWorker.schedule(this)
         // Schedule morning briefing at 07:30 every day.

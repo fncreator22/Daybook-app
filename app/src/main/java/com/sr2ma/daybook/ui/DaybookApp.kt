@@ -1,18 +1,28 @@
 package com.sr2ma.daybook.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
@@ -39,6 +50,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,10 +64,12 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.data.BackupCodec
@@ -265,19 +280,34 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        BackHandler(enabled = state.tab != DaybookTab.TODAY) {
+            viewModel.selectTab(DaybookTab.TODAY)
+        }
+
         Scaffold(
+            topBar = {
+                DaybookTopAppBar(
+                    currentTab = state.tab,
+                    userName = syncState.userName,
+                    onAvatarClick = {
+                        if (state.tab == DaybookTab.SETTINGS) {
+                            viewModel.selectTab(DaybookTab.TODAY)
+                        } else {
+                            viewModel.selectTab(DaybookTab.SETTINGS)
+                        }
+                    },
+                    onBackClick = { viewModel.selectTab(DaybookTab.TODAY) },
+                )
+            },
             bottomBar = { DaybookNavigationBar(selected = state.tab, onSelect = viewModel::selectTab) },
             floatingActionButton = {
-                // Two FABs stacked: per-tab add (top) + voice mic (bottom / primary).
-                Column(horizontalAlignment = Alignment.End) {
-                    AddButton(tab = state.tab, viewModel = viewModel)
-                    Spacer(Modifier.height(12.dp))
-                    VoiceAgentButton(
-                        isListening = state.isListening,
-                        onTap = ::launchMic,
-                        onLongPress = viewModel::openConversation,
-                    )
-                }
+                UnifiedExpandablePillFab(
+                    tab = state.tab,
+                    isListening = state.isListening,
+                    onVoiceTap = ::launchMic,
+                    onVoiceLongPress = viewModel::openConversation,
+                    viewModel = viewModel,
+                )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
@@ -388,14 +418,101 @@ private fun EditorHost(state: DaybookUiState, viewModel: DaybookViewModel) {
     }
 }
 
-/** The six destinations, in the order they are worked through in a day. */
+private val BOTTOM_NAV_TABS = listOf(
+    DaybookTab.TODAY,
+    DaybookTab.TASKS,
+    DaybookTab.MEETINGS,
+    DaybookTab.LOG,
+)
+
+/**
+ * Top app bar with screen title, contextual back navigation for Wallet and Settings,
+ * and an avatar profile icon button to navigate to Settings.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DaybookTopAppBar(
+    currentTab: DaybookTab,
+    userName: String?,
+    onAvatarClick: () -> Unit,
+    onBackClick: () -> Unit,
+) {
+    TopAppBar(
+        title = {
+            val title = when (currentTab) {
+                DaybookTab.TODAY -> "Daybook"
+                DaybookTab.TASKS -> stringResource(R.string.nav_tasks)
+                DaybookTab.MEETINGS -> stringResource(R.string.nav_meetings)
+                DaybookTab.LOG -> stringResource(R.string.nav_log)
+                DaybookTab.WALLET -> "Wallet & Passes"
+                DaybookTab.SETTINGS -> stringResource(R.string.nav_settings)
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        navigationIcon = {
+            if (currentTab == DaybookTab.WALLET || currentTab == DaybookTab.SETTINGS) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close),
+                        contentDescription = "Back to Today",
+                    )
+                }
+            }
+        },
+        actions = {
+            val avatarInitial = userName?.firstOrNull { it.isLetter() }?.uppercase() ?: ""
+            Surface(
+                onClick = onAvatarClick,
+                shape = CircleShape,
+                color = if (currentTab == DaybookTab.SETTINGS) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.primaryContainer,
+                border = BorderStroke(
+                    width = 1.5.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                ),
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(36.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (avatarInitial.isNotBlank()) {
+                        Text(
+                            text = avatarInitial,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (currentTab == DaybookTab.SETTINGS) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = stringResource(R.string.nav_settings),
+                            tint = if (currentTab == DaybookTab.SETTINGS) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        ),
+    )
+}
+
+/** The 4 destinations in the bottom bar, compliant with Material 3 touch target standards. */
 @Composable
 private fun DaybookNavigationBar(
     selected: DaybookTab,
     onSelect: (DaybookTab) -> Unit,
 ) {
     NavigationBar {
-        DaybookTab.entries.forEach { tab ->
+        BOTTOM_NAV_TABS.forEach { tab ->
             val label = stringResource(tab.labelRes)
             NavigationBarItem(
                 selected = tab == selected,
@@ -403,8 +520,6 @@ private fun DaybookNavigationBar(
                 icon = {
                     Icon(
                         painter = painterResource(tab.iconRes),
-                        // The label sits directly underneath, so describing the
-                        // icon as well would have a screen reader say it twice.
                         contentDescription = null,
                     )
                 },
@@ -415,77 +530,232 @@ private fun DaybookNavigationBar(
 }
 
 /**
- * The add button, which adds whatever the current tab is about.
- *
- * Wallet tab shows a two-option dialog: scan barcode or add manually.
- * Settings has nothing to add, so on that tab there is no button at all.
+ * Unified contextual action pill FAB with expandable speed dial and integrated voice agent.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun AddButton(tab: DaybookTab, viewModel: DaybookViewModel) {
+private fun UnifiedExpandablePillFab(
+    tab: DaybookTab,
+    isListening: Boolean,
+    onVoiceTap: () -> Unit,
+    onVoiceLongPress: () -> Unit,
+    viewModel: DaybookViewModel,
+) {
     if (tab == DaybookTab.SETTINGS) return
 
-    if (tab == DaybookTab.WALLET) {
-        WalletAddMenu(viewModel)
-        return
-    }
-
-    // Each branch is parenthesised because bare braces after `->` would be read as
-    // a block, whose value is Unit, rather than as the lambda this needs.
-    val action: () -> Unit = when (tab) {
-        DaybookTab.TODAY    -> ({ viewModel.newTask(dueToday = true) })
-        DaybookTab.TASKS    -> ({ viewModel.newTask() })
-        DaybookTab.LOG      -> ({ viewModel.newLogEntry() })
-        DaybookTab.MEETINGS -> ({ viewModel.newMeeting() })
-        else -> return // WALLET + SETTINGS already handled above
-    }
-
-    @StringRes val description = when (tab) {
-        DaybookTab.LOG      -> R.string.cd_add_log_entry
-        DaybookTab.MEETINGS -> R.string.cd_add_meeting
-        else                -> R.string.cd_add_task
-    }
-
-    androidx.compose.material3.SmallFloatingActionButton(onClick = action) {
-        Icon(
-            painter = painterResource(R.drawable.ic_add),
-            contentDescription = stringResource(description),
-        )
-    }
-}
-
-/**
- * FAB for the Wallet tab. Tapping it opens a Google Wallet-style bottom sheet
- * so the user can choose what kind of pass to add.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun WalletAddMenu(viewModel: DaybookViewModel) {
-    var showSheet by remember { mutableStateOf(false) }
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var showWalletAddSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
-    val galleryLauncher = rememberLauncherForActivityResult(
+    val docLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
     ) { uri ->
-        if (uri != null) viewModel.onGalleryImageSelected(context.applicationContext, uri)
+        if (uri != null) viewModel.onDocumentSelected(context.applicationContext, uri)
     }
 
-    androidx.compose.material3.SmallFloatingActionButton(onClick = { showSheet = true }) {
-        Icon(
-            painter = painterResource(R.drawable.ic_add),
-            contentDescription = stringResource(R.string.cd_add_pass),
-        )
-    }
-
-    if (showSheet) {
+    if (showWalletAddSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
-            onDismissRequest = { showSheet = false },
+            onDismissRequest = { showWalletAddSheet = false },
             sheetState = sheetState,
         ) {
             com.sr2ma.daybook.ui.screens.WalletAddSheet(
-                onScan = { showSheet = false; viewModel.openWalletScanner() },
-                onManual = { category -> showSheet = false; viewModel.newPassManual(category) },
+                onScan = { showWalletAddSheet = false; viewModel.openWalletScanner() },
+                onUploadDocument = { showWalletAddSheet = false; docLauncher.launch("*/*") },
+                onManual = { category -> showWalletAddSheet = false; viewModel.newPassManual(category) },
+            )
+        }
+    }
+
+    val primaryAction: () -> Unit = when (tab) {
+        DaybookTab.TODAY -> ({ isExpanded = !isExpanded })
+        DaybookTab.TASKS -> ({ viewModel.newTask() })
+        DaybookTab.MEETINGS -> ({ viewModel.newMeeting() })
+        DaybookTab.LOG -> ({ viewModel.newLogEntry() })
+        DaybookTab.WALLET -> ({ showWalletAddSheet = true })
+        DaybookTab.SETTINGS -> ({})
+    }
+
+    val primaryLabel = when (tab) {
+        DaybookTab.TODAY -> "Actions"
+        DaybookTab.TASKS -> "Task"
+        DaybookTab.MEETINGS -> "Meeting"
+        DaybookTab.LOG -> "Log"
+        DaybookTab.WALLET -> "Pass"
+        DaybookTab.SETTINGS -> ""
+    }
+
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Expanded action pills
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                slideInVertically(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) { it / 2 },
+            exit = androidx.compose.animation.fadeOut(tween(150)) +
+                androidx.compose.animation.slideOutVertically { it / 2 },
+        ) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ActionMenuItem(
+                    iconRes = R.drawable.ic_mic,
+                    label = "Assistant Chat",
+                    onClick = {
+                        isExpanded = false
+                        viewModel.openConversation()
+                    },
+                )
+                ActionMenuItem(
+                    iconRes = R.drawable.ic_log,
+                    label = "Log Entry",
+                    onClick = {
+                        isExpanded = false
+                        viewModel.newLogEntry()
+                    },
+                )
+                ActionMenuItem(
+                    iconRes = R.drawable.ic_meetings,
+                    label = "New Meeting",
+                    onClick = {
+                        isExpanded = false
+                        viewModel.newMeeting()
+                    },
+                )
+                ActionMenuItem(
+                    iconRes = R.drawable.ic_tasks,
+                    label = "New Task",
+                    onClick = {
+                        isExpanded = false
+                        viewModel.newTask()
+                    },
+                )
+                ActionMenuItem(
+                    iconRes = R.drawable.ic_wallet,
+                    label = "Add Pass",
+                    onClick = {
+                        isExpanded = false
+                        showWalletAddSheet = true
+                    },
+                )
+            }
+        }
+
+        // Unified Pill FAB
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shadowElevation = 6.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            ),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            ) {
+                // Contextual Primary Action Button
+                Row(
+                    modifier = Modifier
+                        .clickable(onClick = primaryAction)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(if (isExpanded) R.drawable.ic_close else R.drawable.ic_add),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    Text(
+                        text = if (isExpanded) "Close" else primaryLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+
+                // Vertical Separator
+                Box(
+                    modifier = Modifier
+                        .height(20.dp)
+                        .width(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                )
+
+                // Voice Mic Action
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(start = 2.dp),
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .combinedClickable(
+                                onClick = onVoiceTap,
+                                onLongClick = {
+                                    haptic.performHapticFeedback(
+                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
+                                    )
+                                    onVoiceLongPress()
+                                },
+                                onLongClickLabel = "Open conversation",
+                            ),
+                        shape = CircleShape,
+                        color = if (isListening) MaterialTheme.colorScheme.primary
+                        else Color.Transparent,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_mic),
+                                contentDescription = stringResource(R.string.cd_voice_agent),
+                                tint = if (isListening) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionMenuItem(
+    @DrawableRes iconRes: Int,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
@@ -507,82 +777,7 @@ private fun LoadingGate(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Floating mic button. Tapping it starts the voice agent.
- * Long-pressing it opens the multi-turn [ConversationSheet].
- * While listening, the [ListeningSheet] handles the UX — this button
- * just changes colour to indicate active state.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun VoiceAgentButton(
-    isListening: Boolean,
-    onTap: () -> Unit,
-    onLongPress: () -> Unit,
-) {
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isListening) 1.5f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
-    )
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isListening) 0f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulse_alpha"
-    )
 
-    Box(contentAlignment = Alignment.Center) {
-        if (isListening) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        this.alpha = alpha
-                    }
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-            )
-        }
-        Surface(
-            modifier = Modifier
-                .size(56.dp)
-                .combinedClickable(
-                    onClick = onTap,
-                    onLongClick = {
-                        haptic.performHapticFeedback(
-                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
-                        )
-                        onLongPress()
-                    },
-                    onLongClickLabel = "Open conversation",
-                ),
-            shape = CircleShape,
-            color = if (isListening) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.secondaryContainer,
-            shadowElevation = 6.dp,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_mic),
-                    contentDescription = stringResource(R.string.cd_voice_agent),
-                    tint = if (isListening) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-        }
-    }
-}
 
 /**
  * Full-screen overlay shown while the mic is actively listening.
@@ -669,6 +864,8 @@ private fun VoiceResultSheet(
             stringResource(R.string.voice_intent_log, parsed.logBody ?: result.spokenText)
         ParsedIntent.CREATE_MEETING ->
             stringResource(R.string.voice_intent_meeting, parsed.meetingTitle ?: result.spokenText)
+        ParsedIntent.CONVERSATION ->
+            parsed.conversationReply ?: result.spokenText
         ParsedIntent.UNKNOWN ->
             stringResource(R.string.voice_intent_task, result.spokenText)
     }
@@ -683,7 +880,7 @@ private fun VoiceResultSheet(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
             Text(
-                text = "Sir, can I do that?",
+                text = if (parsed.intent == ParsedIntent.CONVERSATION) "Daybook Assistant" else "Confirm Action",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,

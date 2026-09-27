@@ -59,7 +59,6 @@ fun SyncSettingsSection(
     Column(modifier = modifier) {
         SectionHeader(
             title = "Sync & Backup",
-            modifier = Modifier.padding(horizontal = 16.dp),
         )
 
         // ── Google account row ────────────────────────────────────────────────
@@ -284,8 +283,8 @@ fun SyncSettingsSection(
 
                 val guardrailDesc = when (state.globalAutonomyGuardrail) {
                     "FULL_AUTONOMY" -> "Full Autonomy: Voice agent directly creates tasks, notes, and meetings without confirmation dialogs."
-                    "HYBRID" -> "Hybrid: Voice agent auto-creates safe tasks and log notes; prompts confirmation ('Sir, can I do that?') for meetings and external sync."
-                    else -> "Always Ask: Voice agent always asks for confirmation ('Sir, can I do that?') before executing any action."
+                    "HYBRID" -> "Hybrid: Voice agent auto-creates safe tasks and log notes; prompts confirmation chips for meetings and external sync."
+                    else -> "Always Ask: Voice agent prompts confirmation chips before executing any action."
                 }
                 Text(
                     text = guardrailDesc,

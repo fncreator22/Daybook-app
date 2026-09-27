@@ -155,9 +155,6 @@ private fun LazyListScope.projectGroup(
         SectionHeader(
             title = heading.ifBlank { stringResource(R.string.tasks_no_project) },
             count = tasks.size,
-            // The list's contentPadding does not reach a header's own text, so the
-            // inset is passed here rather than baked into SectionHeader.
-            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
     items(items = tasks, key = { "$heading-${it.id}" }) { task ->

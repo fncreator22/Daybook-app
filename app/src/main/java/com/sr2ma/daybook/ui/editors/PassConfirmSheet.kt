@@ -170,17 +170,25 @@ fun PassConfirmSheet(
         )
 
         // Barcode value preview (read-only)
-        val preview = seed.barcodeValue.take(30) + if (seed.barcodeValue.length > 30) "…" else ""
-        Text(
-            text = stringResource(R.string.pass_barcode_preview, preview),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
-        )
-        Text(
-            text = stringResource(R.string.wallet_barcode_format, seed.barcodeFormat),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (seed.barcodeValue.isNotBlank()) {
+            val preview = seed.barcodeValue.take(30) + if (seed.barcodeValue.length > 30) "…" else ""
+            Text(
+                text = stringResource(R.string.pass_barcode_preview, preview),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
+            Text(
+                text = stringResource(R.string.wallet_barcode_format, seed.barcodeFormat),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = "Scanned Document (No Barcode)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
+        }
     }
 
     if (showDeleteConfirm) {
@@ -211,6 +219,7 @@ private fun categoryLabel(category: PassCategory): String = stringResource(
         PassCategory.GIFT_CARD     -> R.string.pass_cat_gift_card
         PassCategory.ID            -> R.string.pass_cat_id
         PassCategory.HEALTH        -> R.string.pass_cat_health
+        PassCategory.DOCUMENT      -> R.string.pass_cat_document
         PassCategory.OTHER         -> R.string.pass_cat_other
     },
 )

@@ -212,6 +212,7 @@
     <string name="pass_cat_gift_card">Gift card</string>
     <string name="pass_cat_id">ID</string>
     <string name="pass_cat_health">Health</string>
+    <string name="pass_cat_document">Document</string>
     <string name="pass_cat_other">Other</string>
 
     <!-- Camera permission -->
@@ -277,8 +278,8 @@
 
     <!-- Onboarding & Profile -->
     <string name="onboarding_welcome_title">Welcome to Daybook</string>
-    <string name="onboarding_welcome_subtitle">100% Offline-First Personal Productivity &amp; On-Device AI</string>
-    <string name="onboarding_private_title">100% Private &amp; Local</string>
+    <string name="onboarding_welcome_subtitle" formatted="false">100% Offline-First Personal Productivity &amp; On-Device AI</string>
+    <string name="onboarding_private_title" formatted="false">100% Private &amp; Local</string>
     <string name="onboarding_private_desc">All your tasks, logs, meetings, and passes stay securely encrypted on your device.</string>
     <string name="onboarding_ai_title">On-Device Intelligence</string>
     <string name="onboarding_ai_desc">Autonomous agent powered locally by Gemma 3. No cloud subscriptions required.</string>
@@ -303,6 +304,7 @@
     <string name="wallet_add_transport_desc">Get around town with your phone</string>
     <string name="wallet_add_id_desc">Verify that it\'s you with your phone</string>
     <string name="wallet_add_health_desc">Book appointments and get healthcare access</string>
+    <string name="wallet_add_document_desc">Upload a PDF, document, or photo with OCR text extraction</string>
     <string name="wallet_add_other_desc">Take a photo of any pass, ticket, or membership card</string>
 
     <!-- Wallet: pass row states -->

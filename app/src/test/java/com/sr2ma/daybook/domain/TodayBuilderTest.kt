@@ -157,6 +157,25 @@ class TodayBuilderTest {
     }
 
     @Test
+    fun `completed tasks list holds only tasks closed today and sorted newest first`() {
+        val board = TodayBuilder.build(
+            tasks = listOf(
+                task(1, status = TaskStatus.DONE, completedAt = millisOn(today) + 1000),
+                task(2, status = TaskStatus.DONE, completedAt = millisOn(today) + 5000),
+                task(3, status = TaskStatus.DONE, completedAt = millisOn(today.minusDays(1))),
+                task(4, status = TaskStatus.DONE, completedAt = null),
+                task(5, status = TaskStatus.OPEN, completedAt = millisOn(today)),
+            ),
+            meetings = emptyList(),
+            logEntries = emptyList(),
+            today = today,
+        )
+
+        assertEquals(listOf(2L, 1L), board.completedTasks.map { it.id })
+        assertEquals(2, board.completedToday)
+    }
+
+    @Test
     fun `meetings are only todays and timed ones come first`() {
         val board = TodayBuilder.build(
             tasks = emptyList(),
@@ -267,16 +286,95 @@ class TodayBuilderTest {
             barcodeFormat = "QR_CODE",
             expiryDate = today.minusDays(1),
         )
+        val archivedPass = com.sr2ma.daybook.domain.model.Pass(
+            id = 4,
+            title = "Archived Rail Pass",
+            category = com.sr2ma.daybook.domain.model.PassCategory.TRANSPORT,
+            barcodeValue = "RAIL001",
+            barcodeFormat = "QR_CODE",
+            expiryDate = today.plusDays(10),
+            isArchived = true,
+        )
 
         val board = TodayBuilder.build(
             tasks = emptyList(),
             meetings = emptyList(),
             logEntries = emptyList(),
             today = today,
-            passes = listOf(expiredPass, activePass2, activePass1),
+            passes = listOf(expiredPass, activePass2, archivedPass, activePass1),
         )
 
         assertEquals(listOf(1L, 2L), board.passes.map { it.id })
         assertFalse(board.isEmpty)
     }
+
+    @Test
+    fun `suggestions are computed and populated in board`() {
+        val staleTask = Task(
+            id = 1,
+            title = "Old forgotten task",
+            status = TaskStatus.OPEN,
+            updatedAt = today.minusDays(8).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+            createdAt = 100,
+        )
+        val meetingNeedingFollowUp = Meeting(
+            id = 2,
+            title = "Client catchup",
+            day = today.minusDays(2),
+            nextTouch = today,
+        )
+
+        val board = TodayBuilder.build(
+            tasks = listOf(staleTask),
+            meetings = listOf(meetingNeedingFollowUp),
+            logEntries = emptyList(),
+            today = today,
+        )
+
+        assertEquals(2, board.suggestions.size)
+        assertTrue(board.suggestions.any { it.type == com.sr2ma.daybook.domain.model.SuggestionType.STALE_TASK && it.relatedEntityId == 1L })
+        assertTrue(board.suggestions.any { it.type == com.sr2ma.daybook.domain.model.SuggestionType.FOLLOW_UP_DUE && it.relatedEntityId == 2L })
+        assertFalse(board.isEmpty)
+    }
+
+    @Test
+    fun `board is not empty when only completed tasks exist`() {
+        val board = TodayBuilder.build(
+            tasks = listOf(
+                task(1, status = TaskStatus.DONE, completedAt = millisOn(today)),
+            ),
+            meetings = emptyList(),
+            logEntries = emptyList(),
+            today = today,
+        )
+
+        assertFalse(board.isEmpty)
+        assertEquals(1, board.completedTasks.size)
+        assertEquals(1, board.completedToday)
+    }
+
+    @Test
+    fun `completed tasks respect zone parameter on date boundaries`() {
+        val tokyoZone = java.time.ZoneId.of("Asia/Tokyo")
+        // 2026-04-15 00:30 in Tokyo = 2026-04-14 15:30 UTC
+        val instantTokyoDay = java.time.ZonedDateTime.of(
+            today.year, today.monthValue, today.dayOfMonth,
+            0, 30, 0, 0,
+            tokyoZone,
+        ).toInstant().toEpochMilli()
+
+        val board = TodayBuilder.build(
+            tasks = listOf(
+                task(1, status = TaskStatus.DONE, completedAt = instantTokyoDay),
+            ),
+            meetings = emptyList(),
+            logEntries = emptyList(),
+            today = today,
+            zone = tokyoZone,
+        )
+
+        assertEquals(1, board.completedTasks.size)
+        assertEquals(1L, board.completedTasks[0].id)
+    }
 }
+

@@ -51,6 +51,28 @@ class PassDao(private val helper: DaybookDatabase) {
     fun deleteAll(): Int =
         helper.writableDatabase.delete(DaybookDatabase.TABLE_PASSES, null, null)
 
+    fun toggleFavorite(passId: Long): Boolean {
+        val pass = byId(passId) ?: return false
+        val newStatus = !pass.isFavorited
+        val values = ContentValues().apply {
+            put("is_favorited", if (newStatus) 1 else 0)
+            put("updated_at", System.currentTimeMillis())
+        }
+        helper.writableDatabase.update(DaybookDatabase.TABLE_PASSES, values, WHERE_ID, arrayOf(passId.toString()))
+        return newStatus
+    }
+
+    fun toggleArchive(passId: Long): Boolean {
+        val pass = byId(passId) ?: return false
+        val newStatus = !pass.isArchived
+        val values = ContentValues().apply {
+            put("is_archived", if (newStatus) 1 else 0)
+            put("updated_at", System.currentTimeMillis())
+        }
+        helper.writableDatabase.update(DaybookDatabase.TABLE_PASSES, values, WHERE_ID, arrayOf(passId.toString()))
+        return newStatus
+    }
+
     private fun Pass.toContentValues(): ContentValues = ContentValues().apply {
         put("title", title)
         put("category", category.storedValue)
@@ -61,6 +83,8 @@ class PassDao(private val helper: DaybookDatabase) {
         put("expiry_date", Dates.store(expiryDate))
         put("balance", balance)
         put("image_path", imagePath)
+        put("is_favorited", if (isFavorited) 1 else 0)
+        put("is_archived", if (isArchived) 1 else 0)
         put("created_at", createdAt)
         put("updated_at", updatedAt)
     }
@@ -76,6 +100,8 @@ class PassDao(private val helper: DaybookDatabase) {
         expiryDate = Dates.parseDate(cursor.optString("expiry_date")),
         balance = cursor.optString("balance"),
         imagePath = cursor.optString("image_path"),
+        isFavorited = (cursor.optLong("is_favorited") ?: 0L) == 1L,
+        isArchived = (cursor.optLong("is_archived") ?: 0L) == 1L,
         createdAt = cursor.reqLong("created_at"),
         updatedAt = cursor.reqLong("updated_at"),
     )

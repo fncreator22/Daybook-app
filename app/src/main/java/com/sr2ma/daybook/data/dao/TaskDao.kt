@@ -22,6 +22,11 @@ class TaskDao(private val helper: DaybookDatabase) {
     fun all(): List<Task> =
         helper.readableDatabase.rawQuery(SELECT_ALL, null).mapRows(::readTask)
 
+    fun findById(id: Long): Task? =
+        helper.readableDatabase.rawQuery("SELECT * FROM tasks WHERE id = ? LIMIT 1", arrayOf(id.toString()))
+            .mapRows(::readTask)
+            .firstOrNull()
+
     /** Returns all tasks with calendar_sync_enabled=1 and sync_status=PENDING_SYNC. */
     fun pendingCalendarSync(): List<Task> =
         helper.readableDatabase.rawQuery(SELECT_PENDING_SYNC, null).mapRows(::readTask)

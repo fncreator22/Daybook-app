@@ -169,6 +169,73 @@ object KnowledgeGraphEngine {
         return result
     }
 
+    /**
+     * Finds nodes whose entity_text is mentioned in [text], and performs graph expansion
+     * to surface 1-2 hop related context.
+     */
+    fun expandFromText(
+        db: DaybookDatabase,
+        text: String,
+        maxHops: Int = 2,
+        limit: Int = 6,
+    ): List<KgNode> {
+        if (text.isBlank()) return emptyList()
+        val rdb = db.readableDatabase
+        val cursor = rdb.rawQuery(
+            "SELECT id, entity_text, source_id, source_type, last_seen FROM kg_nodes ORDER BY last_seen DESC LIMIT 100",
+            null,
+        )
+        val matchingNodes = mutableListOf<KgNode>()
+        val lowerText = text.lowercase()
+        while (cursor.moveToNext()) {
+            val id = cursor.getLong(0)
+            val entityText = cursor.getString(1)
+            val sourceId = cursor.getLong(2)
+            val sourceType = cursor.getString(3)
+            val lastSeen = cursor.getLong(4)
+            if (entityText.length >= 3 && lowerText.contains(entityText.lowercase())) {
+                matchingNodes.add(KgNode(id, entityText, sourceId, sourceType, lastSeen))
+            }
+        }
+        cursor.close()
+
+        if (matchingNodes.isEmpty()) return emptyList()
+        val expanded = expand(db, matchingNodes.map { it.id }, maxHops = maxHops)
+        return (matchingNodes + expanded).distinctBy { it.id }.take(limit)
+    }
+
+    /**
+     * Formats a list of nodes and their connected edges into an Open Knowledge Format summary.
+     */
+    fun toOkfTriples(db: DaybookDatabase, nodes: List<KgNode>): String {
+        if (nodes.isEmpty()) return ""
+        val nodeIds = nodes.map { it.id }.joinToString(",")
+        val rdb = db.readableDatabase
+        val cursor = rdb.rawQuery(
+            """
+            SELECT n1.entity_text, e.relation, n2.entity_text
+            FROM kg_edges e
+            JOIN kg_nodes n1 ON e.from_node = n1.id
+            JOIN kg_nodes n2 ON e.to_node = n2.id
+            WHERE e.from_node IN ($nodeIds) OR e.to_node IN ($nodeIds)
+            LIMIT 10
+            """.trimIndent(),
+            null,
+        )
+        val triples = mutableListOf<String>()
+        while (cursor.moveToNext()) {
+            triples.add("(:${cursor.getString(0)} -[${cursor.getString(1)}]-> :${cursor.getString(2)})")
+        }
+        cursor.close()
+        val entities = nodes.joinToString(", ") { "${it.entityText} [${it.sourceType}]" }
+        return buildString {
+            append("OKF Knowledge Graph: Entities: ").append(entities)
+            if (triples.isNotEmpty()) {
+                append(". Relationships: ").append(triples.joinToString(", "))
+            }
+        }
+    }
+
     // ── Population from domain data ───────────────────────────────────────────
 
     /**

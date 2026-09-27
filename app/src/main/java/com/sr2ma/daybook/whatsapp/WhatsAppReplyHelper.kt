@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.whatsapp
+package com.sr2ma.daybook.whatsapp
 
 import android.content.Context
 import android.content.Intent

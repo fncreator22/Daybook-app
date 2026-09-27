@@ -6,6 +6,7 @@ import com.sr2ma.daybook.domain.model.LogKind
 import com.sr2ma.daybook.domain.model.Priority
 import com.sr2ma.daybook.domain.model.TaskStatus
 import java.time.LocalDate
+import java.time.LocalTime
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -31,8 +32,15 @@ import org.json.JSONObject
 object ConversationLlmRouter {
 
     sealed interface RouteResult {
-        /** LLM produced a valid JSON response that was parsed into a [ParseResult]. */
-        data class Classified(val result: ParseResult, val rawResponse: String) : RouteResult
+        /** LLM produced a valid JSON response that was parsed into [ParseResult]s. */
+        data class Classified(
+            val results: List<ParseResult>,
+            val chatResponse: String?,
+            val rawResponse: String,
+        ) : RouteResult {
+            constructor(result: ParseResult, rawResponse: String) : this(listOf(result), null, rawResponse)
+            val result: ParseResult get() = results.firstOrNull() ?: ParseResult(ParsedIntent.UNKNOWN)
+        }
         /** Model file not downloaded yet. */
         data object ModelNotReady : RouteResult
         /** LLM timed out (>30 s). */
@@ -49,7 +57,7 @@ object ConversationLlmRouter {
      * @param userText       The raw message from the user (≤500 chars — already capped upstream).
      * @param today          Reference date for relative date resolution.
      * @param llmEngine      The [LlmEngine] instance to call.
-     * @param db             [DaybookDatabase] used to load memory context for prompt enrichment.
+     * @param db             [DaybookDatabase] used to load memory context and OKF knowledge graph for prompt enrichment.
      */
     suspend fun route(
         userText: String,
@@ -69,8 +77,6 @@ object ConversationLlmRouter {
         if (firstResult is RouteResult.Classified) return firstResult
 
         // ── Hallucination guard: one retry with a minimal prompt ──────────────
-        // The first attempt may have produced prose before/after the JSON, or
-        // used wrong field names. A shorter, more directive prompt often fixes it.
         val retryPrompt = buildRetryPrompt(userText, today)
         return when (val r2 = llmEngine.infer(retryPrompt)) {
             is LlmEngine.InferResult.Success       -> parseResponse(r2.text, today)
@@ -88,11 +94,17 @@ object ConversationLlmRouter {
         db: DaybookDatabase,
     ): String {
         val memoryContext = ConversationMemoryEngine.recentContext(db, limit = 3).take(300)
+        val kgNodes = KnowledgeGraphEngine.expandFromText(db, userText)
+        val kgContext = KnowledgeGraphEngine.toOkfTriples(db, kgNodes).take(300)
+
         val sb = StringBuilder()
         sb.append(SYSTEM_PROMPT)
         sb.append("\n\nToday is $today.")
+        if (kgContext.isNotEmpty()) {
+            sb.append("\n\n$kgContext")
+        }
         if (memoryContext.isNotEmpty()) {
-            sb.append("\n\nRecent context: $memoryContext")
+            sb.append("\n\nRecent conversation: $memoryContext")
         }
         sb.append("\n\nUser message: \"$userText\"")
         sb.append("\n\nRespond with ONLY the JSON object, nothing else:")
@@ -105,28 +117,11 @@ object ConversationLlmRouter {
      */
     private fun buildRetryPrompt(userText: String, today: LocalDate): String =
         "Today: $today. Message: \"$userText\"\n" +
-        "Output ONLY this JSON (no other text): {\"intent\":\"task\"|\"meeting\"|\"log\"|\"unknown\",\"title\":\"...\",\"due\":\"YYYY-MM-DD\"}"
+        "Output ONLY this JSON (no other text): {\"chatResponse\":\"...\",\"actions\":[{\"intent\":\"task\"|\"meeting\"|\"log\"|\"unknown\",\"title\":\"...\",\"due\":\"YYYY-MM-DD\"}]}"
 
     // ── Response parsing ──────────────────────────────────────────────────────
 
-    /**
-     * Parses the LLM's JSON response into a [ParseResult].
-     *
-     * Expected schema (all fields optional except `intent`):
-     * ```json
-     * {
-     *   "intent": "task" | "meeting" | "log" | "unknown",
-     *   "title": "...",
-     *   "priority": "urgent" | "high" | "medium" | "low",
-     *   "due": "YYYY-MM-DD",
-     *   "body": "...",
-     *   "kind": "note" | "win" | "blocker" | "decision",
-     *   "attendees": ["name1", "name2"]
-     * }
-     * ```
-     */
     private fun parseResponse(raw: String, today: LocalDate): RouteResult {
-        // Extract the first {...} block — models sometimes emit prose before/after.
         val jsonStart = raw.indexOf('{')
         val jsonEnd   = raw.lastIndexOf('}')
         if (jsonStart == -1 || jsonEnd <= jsonStart) {
@@ -134,33 +129,62 @@ object ConversationLlmRouter {
         }
         val jsonStr = raw.substring(jsonStart, jsonEnd + 1)
         return try {
-            val obj    = JSONObject(jsonStr)
-            val intent = obj.optString("intent", "unknown").lowercase()
-            val parsed = when (intent) {
-                "task" -> ParseResult(
-                    intent    = ParsedIntent.CREATE_TASK,
-                    taskTitle = obj.optString("title").takeIf { it.isNotBlank() },
-                    priority  = parsePriority(obj.optString("priority")),
-                    status    = TaskStatus.OPEN,
-                    dueDate   = parseDate(obj.optString("due"), today),
-                )
-                "meeting" -> ParseResult(
-                    intent           = ParsedIntent.CREATE_MEETING,
-                    meetingTitle     = obj.optString("title").takeIf { it.isNotBlank() },
-                    meetingAttendees = parseAttendees(obj),
-                    dueDate          = parseDate(obj.optString("due"), today),
-                )
-                "log" -> ParseResult(
-                    intent  = ParsedIntent.CREATE_LOG,
-                    logBody = obj.optString("body").takeIf { it.isNotBlank() }
-                        ?: obj.optString("title").takeIf { it.isNotBlank() },
-                    logKind = parseLogKind(obj.optString("kind")),
-                )
-                else -> ParseResult(intent = ParsedIntent.UNKNOWN)
+            val obj = JSONObject(jsonStr)
+            val chatResponse = obj.optString("chatResponse").takeIf { it.isNotBlank() }
+
+            val actionsArr = obj.optJSONArray("actions")
+            val results = if (actionsArr != null && actionsArr.length() > 0) {
+                (0 until actionsArr.length()).mapNotNull { i ->
+                    parseEntityObject(actionsArr.getJSONObject(i), today)
+                }
+            } else {
+                listOfNotNull(parseEntityObject(obj, today))
             }
-            RouteResult.Classified(parsed, jsonStr)
+
+            if (results.isEmpty() || (results.size == 1 && results[0].intent == ParsedIntent.UNKNOWN && chatResponse != null)) {
+                if (chatResponse != null) {
+                    RouteResult.Classified(listOf(ParseResult(ParsedIntent.CONVERSATION, conversationReply = chatResponse)), chatResponse, jsonStr)
+                } else {
+                    RouteResult.Classified(listOf(ParseResult(ParsedIntent.UNKNOWN)), chatResponse, jsonStr)
+                }
+            } else {
+                RouteResult.Classified(results, chatResponse, jsonStr)
+            }
         } catch (e: JSONException) {
             RouteResult.ParseError(jsonStr.take(200))
+        }
+    }
+
+    private fun parseEntityObject(obj: JSONObject, today: LocalDate): ParseResult {
+        val intent = obj.optString("intent", "unknown").lowercase()
+        return when (intent) {
+            "task" -> ParseResult(
+                intent      = ParsedIntent.CREATE_TASK,
+                taskTitle   = obj.optString("title").takeIf { it.isNotBlank() },
+                priority    = parsePriority(obj.optString("priority")),
+                status      = TaskStatus.OPEN,
+                dueDate     = parseDate(obj.optString("due"), today),
+                meetingTime = parseTime(obj.optString("time")),
+            )
+            "meeting" -> ParseResult(
+                intent           = ParsedIntent.CREATE_MEETING,
+                meetingTitle     = obj.optString("title").takeIf { it.isNotBlank() },
+                meetingAttendees = parseAttendees(obj),
+                dueDate          = parseDate(obj.optString("due"), today),
+                meetingTime      = parseTime(obj.optString("time")),
+            )
+            "log" -> ParseResult(
+                intent  = ParsedIntent.CREATE_LOG,
+                logBody = obj.optString("body").takeIf { it.isNotBlank() }
+                    ?: obj.optString("title").takeIf { it.isNotBlank() },
+                logKind = parseLogKind(obj.optString("kind")),
+            )
+            "conversation", "chitchat" -> ParseResult(
+                intent            = ParsedIntent.CONVERSATION,
+                conversationReply = obj.optString("chatResponse").takeIf { it.isNotBlank() }
+                    ?: obj.optString("title").takeIf { it.isNotBlank() },
+            )
+            else -> ParseResult(intent = ParsedIntent.UNKNOWN)
         }
     }
 
@@ -185,6 +209,23 @@ object ConversationLlmRouter {
         return try { LocalDate.parse(s) } catch (_: Exception) { null }
     }
 
+    private fun parseTime(s: String): LocalTime? {
+        if (s.isBlank()) return null
+        val trimmed = s.trim()
+        return try {
+            LocalTime.parse(trimmed)
+        } catch (_: Exception) {
+            val parts = trimmed.split(":")
+            if (parts.size == 2) {
+                val h = parts[0].toIntOrNull()
+                val m = parts[1].toIntOrNull()
+                if (h != null && m != null) {
+                    try { LocalTime.of(h, m) } catch (_: Exception) { null }
+                } else null
+            } else null
+        }
+    }
+
     private fun parseAttendees(obj: JSONObject): List<String> {
         val arr = obj.optJSONArray("attendees") ?: return emptyList()
         return (0 until arr.length())
@@ -193,28 +234,29 @@ object ConversationLlmRouter {
 
     // ── Prompt constants ──────────────────────────────────────────────────────
 
-    /**
-     * Schema-constrained system prompt.
-     * Keep this short — Gemma 270M has a 1024-token context window.
-     */
     private val SYSTEM_PROMPT = """
-You are a personal assistant. Classify the user message into one of: task, meeting, log, or unknown.
-Respond with ONLY a JSON object matching this schema (no prose, no markdown):
+You are an intelligent personal productivity assistant for Daybook. Classify user input into structured tasks, meetings, logs, or chitchat.
+Respond with ONLY a JSON object matching this schema (no prose outside JSON):
 {
-  "intent": "task" | "meeting" | "log" | "unknown",
-  "title": "clean action title (omit if not applicable)",
-  "priority": "urgent" | "high" | "medium" | "low",
-  "due": "YYYY-MM-DD or empty string",
-  "body": "log text (only for log intent)",
-  "kind": "note" | "win" | "blocker" | "decision",
-  "attendees": ["name"] (only for meeting intent)
+  "chatResponse": "Conversational reply summarizing what was understood or replying naturally",
+  "actions": [
+    {
+      "intent": "task" | "meeting" | "log" | "unknown",
+      "title": "clean action title",
+      "priority": "urgent" | "high" | "medium" | "low",
+      "due": "YYYY-MM-DD or empty",
+      "time": "HH:MM (e.g. 15:00) or empty",
+      "body": "log text (only for log intent)",
+      "kind": "note" | "win" | "blocker" | "decision",
+      "attendees": ["name"]
+    }
+  ]
 }
 Rules:
 - Tasks: things to do, reminders, action items.
-- Meetings: calls, syncs, interviews, or events with other people.
-- Logs: things already done, observations, blockers, decisions.
-- Unknown: everything else (questions, chitchat).
-- Use "unknown" if you are not confident.
-- Never add fields not in the schema.
+- Meetings: calls, syncs, interviews, or events with people.
+- Logs: completed work, observations, blockers, decisions.
+- If user input mentions multiple actions, return each in the actions list.
+- Keep chatResponse helpful, friendly, and natural.
 """.trimIndent()
 }

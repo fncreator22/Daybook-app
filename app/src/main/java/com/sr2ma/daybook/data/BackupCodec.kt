@@ -120,6 +120,8 @@ class BackupCodec {
         putIfNotNull("expiryDate", Dates.store(pass.expiryDate))
         putIfNotNull("balance", pass.balance)
         putIfNotNull("imagePath", pass.imagePath)
+        put("isFavorited", pass.isFavorited)
+        put("isArchived", pass.isArchived)
         put("createdAt", pass.createdAt)
         put("updatedAt", pass.updatedAt)
     }
@@ -247,6 +249,8 @@ class BackupCodec {
             expiryDate = Dates.parseDate(json.stringOrNull("expiryDate")),
             balance = json.stringOrNull("balance"),
             imagePath = json.stringOrNull("imagePath"),
+            isFavorited = json.optBoolean("isFavorited", false),
+            isArchived = json.optBoolean("isArchived", false),
             createdAt = json.optLong("createdAt", 0L),
             updatedAt = json.optLong("updatedAt", 0L),
         )

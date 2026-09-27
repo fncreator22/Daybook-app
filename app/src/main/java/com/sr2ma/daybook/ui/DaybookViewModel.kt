@@ -33,6 +33,7 @@ import com.sr2ma.daybook.domain.ConversationLlmRouter
 import com.sr2ma.daybook.data.dao.WhatsAppDao
 import com.sr2ma.daybook.data.dao.GmailDao
 import com.sr2ma.daybook.domain.model.GmailMessage
+import com.sr2ma.daybook.domain.model.WhatsAppMessage
 import com.sr2ma.daybook.domain.model.TaskStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -168,16 +169,27 @@ class DaybookViewModel(
                         status = TaskStatus.OPEN,
                         project = parsed.project,
                     )
-                    repository.saveTask(task)
+                    val savedId = repository.saveTask(task)
+                    if (task.dueDate != null) {
+                        com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                            context = repository.database.context,
+                            task = task.copy(id = savedId),
+                        )
+                    }
                 } else if (action.startsWith("Meeting:", ignoreCase = true)) {
                     val raw = action.removePrefix("Meeting:").trim()
                     val parsed = NaturalLanguageParser.parse(raw, _state.value.today)
                     val meeting = Meeting(
                         title = parsed.meetingTitle ?: raw,
                         day = parsed.dueDate ?: _state.value.today,
-                        attendees = parsed.meetingAttendees.joinToString(", "),
+                        startTime = parsed.meetingTime,
+                        attendees = parsed.meetingAttendees.joinToString(", ").ifBlank { msg.sender },
                     )
-                    repository.saveMeeting(meeting)
+                    val savedId = repository.saveMeeting(meeting)
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                        context = repository.database.context,
+                        meeting = meeting.copy(id = savedId),
+                    )
                 }
             }
             loadRecentGmailMessages()
@@ -279,6 +291,14 @@ class DaybookViewModel(
         ) { repository.deletePass(pass) }
     }
 
+    fun toggleFavoritePass(passId: Long) {
+        write { repository.toggleFavoritePass(passId) }
+    }
+
+    fun toggleArchivePass(passId: Long) {
+        write { repository.toggleArchivePass(passId) }
+    }
+
     /**
      * Processes a gallery image URI through ML Kit barcode scanner + OCR and
      * opens PassSheet with whatever was found. If no barcode is detected the sheet
@@ -319,6 +339,91 @@ class DaybookViewModel(
                 }
             } catch (_: Exception) {
                 update { it.copy(busy = false, message = nextMessage(R.string.wallet_no_barcode)) }
+            }
+        }
+    }
+
+    /**
+     * Processes a document (PDF or image) URI through ML Kit OCR + barcode detection.
+     * Unlike onGalleryImageSelected, no-barcode is not an error here — documents are
+     * saved with PassCategory.DOCUMENT using the extracted OCR text and inferred title.
+     */
+    fun onDocumentSelected(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch {
+            update { it.copy(busy = true) }
+            try {
+                val image = withContext(Dispatchers.IO) {
+                    val mimeType = context.contentResolver.getType(uri)
+                    if (mimeType == "application/pdf") {
+                        val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                        if (pfd != null) {
+                            val renderer = android.graphics.pdf.PdfRenderer(pfd)
+                            if (renderer.pageCount > 0) {
+                                val page = renderer.openPage(0)
+                                val bitmap = android.graphics.Bitmap.createBitmap(
+                                    page.width * 2, page.height * 2, android.graphics.Bitmap.Config.ARGB_8888
+                                )
+                                page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                page.close()
+                                renderer.close()
+                                pfd.close()
+                                com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                            } else {
+                                renderer.close()
+                                pfd.close()
+                                null
+                            }
+                        } else null
+                    } else {
+                        com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+                    }
+                }
+
+                if (image == null) {
+                    val seed = Pass(
+                        title = "Document",
+                        category = com.sr2ma.daybook.domain.model.PassCategory.DOCUMENT,
+                        barcodeValue = "",
+                        barcodeFormat = "",
+                        ocrText = "",
+                    )
+                    update { it.copy(busy = false, editor = Editor.PassSheet(seed)) }
+                    return@launch
+                }
+
+                val barcodesDeferred = kotlinx.coroutines.CompletableDeferred<List<com.google.mlkit.vision.barcode.common.Barcode>>()
+                com.google.mlkit.vision.barcode.BarcodeScanning.getClient().process(image)
+                    .addOnSuccessListener { barcodesDeferred.complete(it) }
+                    .addOnFailureListener { barcodesDeferred.complete(emptyList()) }
+                val barcodes = barcodesDeferred.await()
+
+                val ocrDeferred = kotlinx.coroutines.CompletableDeferred<String>()
+                com.google.mlkit.vision.text.TextRecognition.getClient(
+                    com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+                ).process(image)
+                    .addOnSuccessListener { ocrDeferred.complete(it.text) }
+                    .addOnFailureListener { ocrDeferred.complete("") }
+                val ocrText = ocrDeferred.await()
+
+                val first = barcodes.firstOrNull()
+                val inferredTitle = ocrText.lines().map { it.trim() }.firstOrNull { it.isNotBlank() }?.take(40) ?: "Document"
+                val seed = Pass(
+                    title = inferredTitle,
+                    category = com.sr2ma.daybook.domain.model.PassCategory.DOCUMENT,
+                    barcodeValue = first?.rawValue ?: "",
+                    barcodeFormat = first?.let { barcodeFormatName(it.format) } ?: "",
+                    ocrText = ocrText.take(1000),
+                )
+                update { it.copy(busy = false, editor = Editor.PassSheet(seed)) }
+            } catch (e: Exception) {
+                val seed = Pass(
+                    title = "Document",
+                    category = com.sr2ma.daybook.domain.model.PassCategory.DOCUMENT,
+                    barcodeValue = "",
+                    barcodeFormat = "",
+                    ocrText = "",
+                )
+                update { it.copy(busy = false, editor = Editor.PassSheet(seed)) }
             }
         }
     }
@@ -410,14 +515,21 @@ class DaybookViewModel(
             ParsedIntent.CREATE_TASK -> {
                 val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: text
                 write {
-                    repository.saveTask(
-                        Task(
-                            title    = title,
-                            priority = parsed.priority,
-                            dueDate  = parsed.dueDate,
-                            project  = parsed.project,
-                        )
+                    val task = Task(
+                        title    = title,
+                        priority = parsed.priority,
+                        dueDate  = parsed.dueDate,
+                        project  = parsed.project,
                     )
+                    val savedId = repository.saveTask(task)
+                    if (task.dueDate != null) {
+                        com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                            context = repository.database.context,
+                            taskId = savedId,
+                            title = task.title,
+                            dueDate = task.dueDate,
+                        )
+                    }
                 }
             }
             ParsedIntent.CREATE_LOG -> {
@@ -433,8 +545,21 @@ class DaybookViewModel(
                 // Use the parser-extracted date if present, fall back to today
                 val day = parsed.dueDate ?: today
                 write {
-                    repository.saveMeeting(Meeting(title = title, day = day))
+                    val meeting = Meeting(
+                        title = title,
+                        day = day,
+                        startTime = parsed.meetingTime,
+                        attendees = parsed.meetingAttendees.joinToString(", "),
+                    )
+                    val savedId = repository.saveMeeting(meeting)
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                        context = repository.database.context,
+                        meeting = meeting.copy(id = savedId),
+                    )
                 }
+            }
+            ParsedIntent.CONVERSATION -> {
+                // Conversational intent — no item to persist
             }
             ParsedIntent.UNKNOWN -> {
                 // Treat as a plain task so nothing the user says is ever silently lost
@@ -692,10 +817,83 @@ class DaybookViewModel(
         }
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             val today = _state.value.today
+            val guardrail = syncPreferences?.globalAutonomyGuardrail ?: "ALWAYS_ASK"
+
+            // ── Stage 2: Multi-clause / Compound item detection ──────────────
+            val clauses = NaturalLanguageParser.splitClauses(safText)
+            if (clauses.size > 1) {
+                val multiResults = NaturalLanguageParser.parseMulti(safText, referenceDate = today)
+                    .filter { it.intent != ParsedIntent.UNKNOWN && it.intent != ParsedIntent.CONVERSATION }
+                if (multiResults.isNotEmpty()) {
+                    val summaryList = multiResults.mapIndexed { idx, res ->
+                        when (res.intent) {
+                            ParsedIntent.CREATE_TASK -> {
+                                val t = res.taskTitle ?: "Task"
+                                val d = res.dueDate?.let { " ($it)" } ?: ""
+                                "${idx + 1}. Task: \"$t\"$d"
+                            }
+                            ParsedIntent.CREATE_MEETING -> {
+                                val t = res.meetingTitle ?: "Meeting"
+                                val d = res.dueDate?.let { " on $it" } ?: ""
+                                "${idx + 1}. Meeting: \"$t\"$d"
+                            }
+                            ParsedIntent.CREATE_LOG -> {
+                                val b = res.logBody ?: "Log"
+                                "${idx + 1}. Log: \"${b.take(50)}\""
+                            }
+                            else -> "${idx + 1}. Item"
+                        }
+                    }.joinToString("\n")
+
+                    if (guardrail == "FULL_AUTONOMY") {
+                        multiResults.forEach { res ->
+                            val fullText = when (res.intent) {
+                                ParsedIntent.CREATE_TASK -> res.taskTitle ?: safText
+                                ParsedIntent.CREATE_MEETING -> res.meetingTitle ?: safText
+                                ParsedIntent.CREATE_LOG -> res.logBody ?: safText
+                                else -> safText
+                            }
+                            commitParsedIntent(fullText, res)
+                        }
+                        val agentMsg = com.sr2ma.daybook.domain.ConversationMessage(
+                            text = "I've saved all ${multiResults.size} items for you:\n$summaryList",
+                            isUser = false,
+                            suggestions = listOf("Dismiss"),
+                        )
+                        update {
+                            it.copy(
+                                conversationMessages = it.conversationMessages + agentMsg,
+                                agentThinking = false,
+                                pendingMultiActions = emptyList(),
+                            )
+                        }
+                        return@launch
+                    } else {
+                        val agentMsg = com.sr2ma.daybook.domain.ConversationMessage(
+                            text = "I identified ${multiResults.size} items. Would you like me to save them all?\n$summaryList",
+                            isUser = false,
+                            suggestions = listOf("Save All", "Dismiss"),
+                        )
+                        update {
+                            it.copy(
+                                conversationMessages = it.conversationMessages + agentMsg,
+                                agentThinking = false,
+                                pendingMultiActions = multiResults,
+                            )
+                        }
+                        return@launch
+                    }
+                }
+            }
+
             val parsed = NaturalLanguageParser.parse(safText, referenceDate = today)
 
-            val guardrail = syncPreferences?.globalAutonomyGuardrail ?: "ALWAYS_ASK"
             val (agentText, chips) = when (parsed.intent) {
+                ParsedIntent.CONVERSATION -> {
+                    val reply = parsed.conversationReply
+                        ?: "Hello! How can I help you manage your day?"
+                    reply to listOf("Add task", "Schedule meeting", "New log", "Dismiss")
+                }
                 ParsedIntent.CREATE_TASK -> {
                     val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
                     val priorityLabel = when (parsed.priority) {
@@ -709,7 +907,7 @@ class DaybookViewModel(
                         commitParsedIntent(safText, parsed)
                         "I've added the task: \"$title\"$priorityLabel$dateLabel." to listOf("Dismiss")
                     } else {
-                        "Sir, can I do that? — Add task: \"$title\"$priorityLabel$dateLabel?" to
+                        "Would you like me to add this task: \"$title\"$priorityLabel$dateLabel?" to
                             listOf("Add task", "Dismiss")
                     }
                 }
@@ -722,7 +920,7 @@ class DaybookViewModel(
                         commitParsedIntent(safText, parsed)
                         "I've scheduled the meeting: \"$title\"$who on $day." to listOf("Dismiss")
                     } else {
-                        "Sir, can I schedule this meeting: \"$title\"$who on $day?" to
+                        "Would you like to schedule this meeting: \"$title\"$who on $day?" to
                             listOf("Add meeting", "Dismiss")
                     }
                 }
@@ -738,7 +936,7 @@ class DaybookViewModel(
                         commitParsedIntent(safText, parsed)
                         "I've saved your $kindLabel: \"${body.take(80)}\"." to listOf("Dismiss")
                     } else {
-                        "Sir, can I do that? — Log $kindLabel: \"${body.take(80)}\"?" to
+                        "Would you like me to save this $kindLabel: \"${body.take(80)}\"?" to
                             listOf("Save", "Dismiss")
                     }
                 }
@@ -759,11 +957,62 @@ class DaybookViewModel(
                         }
                         when (routeResult) {
                             is ConversationLlmRouter.RouteResult.Classified -> {
-                                // LLM succeeded — re-run the Stage 3 render path
-                                // with the LLM-produced ParseResult.
-                                val llmParsed = routeResult.result
                                 val llmGuardrail = syncPreferences?.globalAutonomyGuardrail ?: "ALWAYS_ASK"
+
+                                if (routeResult.results.size > 1) {
+                                    val multi = routeResult.results
+                                    val summaryList = multi.mapIndexed { idx, res ->
+                                        when (res.intent) {
+                                            ParsedIntent.CREATE_TASK -> "${idx + 1}. Task: \"${res.taskTitle ?: "Task"}\"${res.dueDate?.let { " ($it)" } ?: ""}"
+                                            ParsedIntent.CREATE_MEETING -> "${idx + 1}. Meeting: \"${res.meetingTitle ?: "Meeting"}\"${res.dueDate?.let { " on $it" } ?: ""}"
+                                            ParsedIntent.CREATE_LOG -> "${idx + 1}. Log: \"${res.logBody ?: "Log"}\""
+                                            else -> "${idx + 1}. Item"
+                                        }
+                                    }.joinToString("\n")
+                                    val replyPrefix = routeResult.chatResponse?.let { "$it\n\n" } ?: ""
+                                    if (llmGuardrail == "FULL_AUTONOMY") {
+                                        multi.forEach { res ->
+                                            val t = res.taskTitle ?: res.meetingTitle ?: res.logBody ?: safText
+                                            commitParsedIntent(t, res)
+                                        }
+                                        val llmMsg = com.sr2ma.daybook.domain.ConversationMessage(
+                                            text = "${replyPrefix}I've saved all ${multi.size} items:\n$summaryList",
+                                            isUser = false,
+                                            suggestions = listOf("Dismiss"),
+                                        )
+                                        update {
+                                            it.copy(
+                                                conversationMessages = it.conversationMessages + llmMsg,
+                                                agentThinking = false,
+                                                pendingMultiActions = emptyList(),
+                                            )
+                                        }
+                                        return@launch
+                                    } else {
+                                        val llmMsg = com.sr2ma.daybook.domain.ConversationMessage(
+                                            text = "${replyPrefix}I found ${multi.size} items. Would you like me to save them?\n$summaryList",
+                                            isUser = false,
+                                            suggestions = listOf("Save All", "Dismiss"),
+                                        )
+                                        update {
+                                            it.copy(
+                                                conversationMessages = it.conversationMessages + llmMsg,
+                                                agentThinking = false,
+                                                pendingMultiActions = multi,
+                                            )
+                                        }
+                                        return@launch
+                                    }
+                                }
+
+                                val llmParsed = routeResult.results.firstOrNull() ?: ParseResult(ParsedIntent.UNKNOWN)
                                 val (llmText, llmChips) = when (llmParsed.intent) {
+                                    ParsedIntent.CONVERSATION -> {
+                                        val reply = routeResult.chatResponse
+                                            ?: llmParsed.conversationReply
+                                            ?: "How can I help you today?"
+                                        reply to listOf("Add task", "Schedule meeting", "New log", "Dismiss")
+                                    }
                                     ParsedIntent.CREATE_TASK -> {
                                         val t = llmParsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
                                         val pl = when (llmParsed.priority) {
@@ -777,7 +1026,7 @@ class DaybookViewModel(
                                             commitParsedIntent(safText, llmParsed)
                                             "I've added the task: \"$t\"$pl$dl." to listOf("Dismiss")
                                         } else {
-                                            "Sir, can I do that? — Add task: \"$t\"$pl$dl?" to
+                                            "Would you like me to add this task: \"$t\"$pl$dl?" to
                                                 listOf("Add task", "Dismiss")
                                         }
                                     }
@@ -790,7 +1039,7 @@ class DaybookViewModel(
                                             commitParsedIntent(safText, llmParsed)
                                             "I've scheduled the meeting: \"$t\"$who on $day." to listOf("Dismiss")
                                         } else {
-                                            "Sir, can I schedule this meeting: \"$t\"$who on $day?" to
+                                            "Would you like to schedule this meeting: \"$t\"$who on $day?" to
                                                 listOf("Add meeting", "Dismiss")
                                         }
                                     }
@@ -804,14 +1053,14 @@ class DaybookViewModel(
                                         }
                                         if (llmGuardrail == "FULL_AUTONOMY" || llmGuardrail == "HYBRID") {
                                             commitParsedIntent(safText, llmParsed)
-                                            "I've logged your $k: \"${b.take(80)}\"." to listOf("Dismiss")
+                                            "I've saved your $k: \"${b.take(80)}\"." to listOf("Dismiss")
                                         } else {
-                                            "Sir, can I do that? — Log $k: \"${b.take(80)}\"?" to
+                                            "Would you like me to save this $k: \"${b.take(80)}\"?" to
                                                 listOf("Save", "Dismiss")
                                         }
                                     }
                                     ParsedIntent.UNKNOWN -> {
-                                        "I'm not sure what to do with that. What would you like?" to
+                                        (routeResult.chatResponse ?: "I'm not sure what to do with that. What would you like?") to
                                             listOf("Add as task", "Add as meeting", "Add as log", "Dismiss")
                                     }
                                 }
@@ -878,16 +1127,31 @@ class DaybookViewModel(
     /**
      * Called when the user taps a suggestion chip in the conversation.
      *
-     * Saves the item described by [lastConversationParseResult] — the NLP result
-     * from the most recent agent turn — then closes the sheet.
-     *
-     * Fallback for UNKNOWN chips: creates a plain task from the last user message.
+     * Saves the item described by [lastConversationParseResult] or commits
+     * [pendingMultiActions] — then closes the sheet.
      */
     fun onConversationSuggestion(suggestion: String) {
         if (suggestion == "Dismiss") {
             closeConversation()
             return
         }
+
+        if (suggestion == "Save All") {
+            val pending = _state.value.pendingMultiActions
+            pending.forEach { res ->
+                val fullText = when (res.intent) {
+                    ParsedIntent.CREATE_TASK -> res.taskTitle ?: ""
+                    ParsedIntent.CREATE_MEETING -> res.meetingTitle ?: ""
+                    ParsedIntent.CREATE_LOG -> res.logBody ?: ""
+                    else -> ""
+                }
+                commitParsedIntent(fullText, res)
+            }
+            update { it.copy(pendingMultiActions = emptyList()) }
+            closeConversation()
+            return
+        }
+
         val parsed = _state.value.lastConversationParseResult
         val today  = _state.value.today
         // Grab last user text as fallback title/body
@@ -898,24 +1162,41 @@ class DaybookViewModel(
             "Add task" -> {
                 val title = parsed?.taskTitle?.takeIf { it.isNotBlank() } ?: lastUserText
                 write {
-                    repository.saveTask(
-                        Task(
-                            title    = title,
-                            priority = parsed?.priority ?: com.sr2ma.daybook.domain.model.Priority.MEDIUM,
-                            dueDate  = parsed?.dueDate,
-                            project  = parsed?.project,
-                        )
+                    val task = Task(
+                        title    = title,
+                        priority = parsed?.priority ?: com.sr2ma.daybook.domain.model.Priority.MEDIUM,
+                        dueDate  = parsed?.dueDate,
+                        project  = parsed?.project,
                     )
+                    val savedId = repository.saveTask(task)
+                    if (task.dueDate != null) {
+                        com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                            context = repository.database.context,
+                            taskId = savedId,
+                            title = task.title,
+                            dueDate = task.dueDate,
+                        )
+                    }
                 }
             }
-            "Add meeting" -> {
+            "Add meeting", "Schedule meeting" -> {
                 val title = parsed?.meetingTitle?.takeIf { it.isNotBlank() } ?: lastUserText
                 val day   = parsed?.dueDate ?: today
                 write {
-                    repository.saveMeeting(Meeting(title = title, day = day))
+                    val meeting = Meeting(
+                        title = title,
+                        day = day,
+                        startTime = parsed?.meetingTime,
+                        attendees = parsed?.meetingAttendees?.joinToString(", ") ?: "",
+                    )
+                    val savedId = repository.saveMeeting(meeting)
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                        context = repository.database.context,
+                        meeting = meeting.copy(id = savedId),
+                    )
                 }
             }
-            "Save" -> {
+            "Save", "New log" -> {
                 val body = parsed?.logBody?.takeIf { it.isNotBlank() } ?: lastUserText
                 write {
                     repository.saveLogEntry(
@@ -932,7 +1213,12 @@ class DaybookViewModel(
                 repository.saveTask(Task(title = lastUserText))
             }
             "Add as meeting" -> write {
-                repository.saveMeeting(Meeting(title = lastUserText, day = today))
+                val meeting = Meeting(title = lastUserText, day = today)
+                val savedId = repository.saveMeeting(meeting)
+                com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                    context = repository.database.context,
+                    meeting = meeting.copy(id = savedId),
+                )
             }
             "Add as log" -> write {
                 repository.saveLogEntry(LogEntry(body = lastUserText, day = today))
@@ -958,7 +1244,23 @@ class DaybookViewModel(
     /** Saves the sheet and closes it. A blank title is ignored rather than stored. */
     fun saveTask(task: Task) {
         if (task.title.isBlank()) return
-        write(onSuccess = { it.copy(editor = null) }) { repository.saveTask(task) }
+        write(onSuccess = { it.copy(editor = null) }) {
+            val savedId = repository.saveTask(task)
+            val effectiveId = if (task.id == 0L) savedId else task.id
+            if (task.dueDate != null && task.status != TaskStatus.DONE && task.status != TaskStatus.CANCELLED) {
+                com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                    context = repository.database.context,
+                    taskId = effectiveId,
+                    title = task.title,
+                    dueDate = task.dueDate,
+                )
+            } else {
+                com.sr2ma.daybook.notifications.ReminderNotificationManager.cancelTaskReminder(
+                    context = repository.database.context,
+                    taskId = effectiveId,
+                )
+            }
+        }
     }
 
     /**
@@ -974,12 +1276,16 @@ class DaybookViewModel(
             com.sr2ma.daybook.domain.ParsedIntent.CREATE_MEETING -> {
                 val day = parsed.dueDate ?: today
                 write {
-                    repository.saveMeeting(
-                        com.sr2ma.daybook.domain.model.Meeting(
-                            title = parsed.meetingTitle?.ifBlank { null } ?: title.trim(),
-                            attendees = parsed.meetingAttendees.joinToString(", "),
-                            day = day,
-                        )
+                    val meeting = com.sr2ma.daybook.domain.model.Meeting(
+                        title = parsed.meetingTitle?.ifBlank { null } ?: title.trim(),
+                        attendees = parsed.meetingAttendees.joinToString(", "),
+                        day = day,
+                        startTime = parsed.meetingTime,
+                    )
+                    val savedId = repository.saveMeeting(meeting)
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                        context = repository.database.context,
+                        meeting = meeting.copy(id = savedId),
                     )
                 }
             }
@@ -996,14 +1302,21 @@ class DaybookViewModel(
             }
             else -> {
                 write {
-                    repository.saveTask(
-                        com.sr2ma.daybook.domain.model.Task(
-                            title = parsed.taskTitle?.ifBlank { null } ?: title.trim(),
-                            priority = parsed.priority,
-                            dueDate = parsed.dueDate ?: today,
-                            project = parsed.project,
-                        )
+                    val task = com.sr2ma.daybook.domain.model.Task(
+                        title = parsed.taskTitle?.ifBlank { null } ?: title.trim(),
+                        priority = parsed.priority,
+                        dueDate = parsed.dueDate ?: today,
+                        project = parsed.project,
                     )
+                    val savedId = repository.saveTask(task)
+                    if (task.dueDate != null) {
+                        com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                            context = repository.database.context,
+                            taskId = savedId,
+                            title = task.title,
+                            dueDate = task.dueDate,
+                        )
+                    }
                 }
             }
         }
@@ -1017,14 +1330,36 @@ class DaybookViewModel(
     }
 
     fun toggleTaskDone(task: Task) {
-        write { repository.toggleTaskDone(task) }
+        val willBeDone = task.status != TaskStatus.DONE
+        write {
+            repository.toggleTaskDone(task)
+            if (task.dueDate != null) {
+                if (willBeDone) {
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.cancelTaskReminder(
+                        context = repository.database.context,
+                        taskId = task.id,
+                    )
+                } else {
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                        context = repository.database.context,
+                        task = task.copy(status = TaskStatus.OPEN),
+                    )
+                }
+            }
+        }
     }
 
     fun deleteTask(task: Task) {
         write(
             failure = R.string.error_delete_failed,
             onSuccess = { it.copy(editor = null) },
-        ) { repository.deleteTask(task.id) }
+        ) {
+            repository.deleteTask(task.id)
+            com.sr2ma.daybook.notifications.ReminderNotificationManager.cancelTaskReminder(
+                context = repository.database.context,
+                taskId = task.id,
+            )
+        }
     }
 
     // ---- Log -------------------------------------------------------------
@@ -1045,7 +1380,14 @@ class DaybookViewModel(
 
     fun saveMeeting(meeting: Meeting) {
         if (meeting.title.isBlank()) return
-        write(onSuccess = { it.copy(editor = null) }) { repository.saveMeeting(meeting) }
+        write(onSuccess = { it.copy(editor = null) }) {
+            val savedId = repository.saveMeeting(meeting)
+            val effectiveMeeting = if (meeting.id == 0L) meeting.copy(id = savedId) else meeting
+            com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                context = repository.database.context,
+                meeting = effectiveMeeting,
+            )
+        }
     }
 
     /**
@@ -1060,8 +1402,87 @@ class DaybookViewModel(
         write(
             failure = R.string.error_delete_failed,
             onSuccess = { it.copy(editor = null) },
-        ) { repository.deleteMeeting(meeting.id) }
+        ) {
+            repository.deleteMeeting(meeting.id)
+            com.sr2ma.daybook.notifications.ReminderNotificationManager.cancelMeetingReminder(
+                context = repository.database.context,
+                meetingId = meeting.id,
+            )
+        }
     }
+
+    /**
+     * Converts a WhatsApp message into a Task or Meeting using NLP.
+     */
+    fun convertWhatsAppAction(msg: WhatsAppMessage) {
+        val today = _state.value.today
+        val parsed = NaturalLanguageParser.parse(msg.message, today)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                whatsAppDao.delete(msg.id)
+            }
+            when (parsed.intent) {
+                ParsedIntent.CREATE_MEETING -> {
+                    val day = parsed.dueDate ?: today
+                    val title = parsed.meetingTitle?.ifBlank { null } ?: "Meeting with ${msg.sender}"
+                    val meeting = Meeting(
+                        title = title,
+                        attendees = msg.sender,
+                        day = day,
+                        startTime = parsed.meetingTime,
+                    )
+                    write {
+                        val savedId = repository.saveMeeting(meeting)
+                        com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                            context = repository.database.context,
+                            meeting = meeting.copy(id = savedId),
+                        )
+                    }
+                }
+                ParsedIntent.CREATE_LOG -> {
+                    val body = parsed.logBody?.ifBlank { null } ?: "${msg.sender}: ${msg.message}"
+                    write {
+                        repository.saveLogEntry(
+                            LogEntry(day = today, body = body, kind = parsed.logKind)
+                        )
+                    }
+                }
+                else -> {
+                    val title = parsed.taskTitle?.ifBlank { null } ?: "${msg.sender}: ${msg.message}"
+                    val task = Task(
+                        title = title,
+                        priority = parsed.priority,
+                        dueDate = parsed.dueDate ?: today,
+                        project = "WhatsApp",
+                    )
+                    write {
+                        val savedId = repository.saveTask(task)
+                        com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                            context = repository.database.context,
+                            task = task.copy(id = savedId),
+                        )
+                    }
+                }
+            }
+            loadRecentWhatsAppMessages()
+        }
+    }
+
+    /** Clears sample offline Gmail messages from the database. */
+    fun clearSampleGmailMessages() {
+        syncPreferences?.sampleGmailCleared = true
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.database.writableDatabase.delete(
+                    DaybookDatabase.TABLE_GMAIL,
+                    "message_id LIKE 'offline_%'",
+                    null
+                )
+            }
+            loadRecentGmailMessages()
+        }
+    }
+
 
     // ---- Backup ----------------------------------------------------------
 

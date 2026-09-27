@@ -4,11 +4,15 @@ import com.sr2ma.daybook.data.dao.LogDao
 import com.sr2ma.daybook.data.dao.MeetingDao
 import com.sr2ma.daybook.data.dao.PassDao
 import com.sr2ma.daybook.data.dao.TaskDao
+import com.sr2ma.daybook.domain.CadenceEngine
+import com.sr2ma.daybook.domain.model.Cadence
 import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.domain.model.Pass
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.model.TaskStatus
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -94,6 +98,11 @@ class DaybookRepository(internal val database: DaybookDatabase) {
     /** Inserts or updates [task], stamping timestamps. Returns the row id. */
     suspend fun saveTask(task: Task, now: Long = System.currentTimeMillis()): Long =
         withContext(io) {
+            val wasDone = if (task.id != 0L) {
+                taskDao.findById(task.id)?.status == TaskStatus.DONE
+            } else {
+                false
+            }
             val stamped = task.copy(
                 title = task.title.trim(),
                 notes = task.notes.trim(),
@@ -111,6 +120,27 @@ class DaybookRepository(internal val database: DaybookDatabase) {
                 },
             )
             val id = taskDao.upsert(stamped)
+            val isNowDone = stamped.status == TaskStatus.DONE
+            if (isNowDone && !wasDone && stamped.cadence != Cadence.NONE) {
+                val completionMillis = stamped.completedAt ?: now
+                val completedLocalDate = Instant.ofEpochMilli(completionMillis)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                val nextTask = CadenceEngine.onTaskCompleted(stamped.copy(id = id), completedLocalDate)
+                if (nextTask != null) {
+                    val nextId = taskDao.upsert(nextTask)
+                    if (nextTask.dueDate != null) {
+                        try {
+                            com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                                context = database.context,
+                                task = nextTask.copy(id = nextId),
+                            )
+                        } catch (_: Throwable) {
+                            // Defensive: Context or AlarmManager might be unavailable in unit tests
+                        }
+                    }
+                }
+            }
             refreshTasks()
             id
         }
@@ -309,6 +339,16 @@ class DaybookRepository(internal val database: DaybookDatabase) {
 
     suspend fun deletePass(pass: Pass) = withContext(io) {
         passDao.delete(pass.id)
+        _passes.value = passDao.all()
+    }
+
+    suspend fun toggleFavoritePass(passId: Long) = withContext(io) {
+        passDao.toggleFavorite(passId)
+        _passes.value = passDao.all()
+    }
+
+    suspend fun toggleArchivePass(passId: Long) = withContext(io) {
+        passDao.toggleArchive(passId)
         _passes.value = passDao.all()
     }
 }

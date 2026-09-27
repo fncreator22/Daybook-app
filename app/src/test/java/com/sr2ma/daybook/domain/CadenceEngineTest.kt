@@ -199,6 +199,33 @@ class CadenceEngineTest {
         val result = CadenceEngine.isStale(task, today)
         assertEquals(false, result)
     }
+
+    @Test
+    fun `next instance clears gcalEventId and resets syncStatus`() {
+        val syncedTask = weeklyTask(id = 77L, dueDate = today).copy(
+            gcalEventId = "gcal_event_abc123",
+            syncStatus = com.sr2ma.daybook.domain.model.SyncStatus.SYNCED,
+            calendarSyncEnabled = true,
+        )
+
+        val next = CadenceEngine.onTaskCompleted(syncedTask, today)!!
+        assertNull(next.gcalEventId)
+        assertEquals(com.sr2ma.daybook.domain.model.SyncStatus.PENDING_SYNC, next.syncStatus)
+        assertEquals(77L, next.cadenceParentId)
+    }
+
+    @Test
+    fun `next instance sets syncStatus to LOCAL_ONLY when calendarSyncEnabled is false`() {
+        val nonSyncedTask = weeklyTask(id = 88L, dueDate = today).copy(
+            gcalEventId = "stale_id",
+            syncStatus = com.sr2ma.daybook.domain.model.SyncStatus.SYNCED,
+            calendarSyncEnabled = false,
+        )
+
+        val next = CadenceEngine.onTaskCompleted(nonSyncedTask, today)!!
+        assertNull(next.gcalEventId)
+        assertEquals(com.sr2ma.daybook.domain.model.SyncStatus.LOCAL_ONLY, next.syncStatus)
+    }
 }
 
 // Extension helper — converts LocalDate to epoch millis at midnight UTC for tests

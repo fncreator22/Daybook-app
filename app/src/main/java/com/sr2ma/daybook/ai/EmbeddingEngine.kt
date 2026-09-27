@@ -1,4 +1,4 @@
-﻿package com.sr2ma.daybook.ai
+package com.sr2ma.daybook.ai
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -15,19 +15,23 @@ import java.nio.LongBuffer
  * The model file (`minilm-l6-v2-int8.onnx`) must be placed in `assets/`.
  * It is bundled in the APK (~22 MB) and is never downloaded at runtime.
  *
- * The tokenizer is a minimal whitespace + subword approximation â€” sufficient
- * for semantic similarity over short task/meeting/log texts. For production
- * quality, replace [tokenize] with a proper BERT WordPiece tokenizer library.
+ * Uses a real offline WordPiece subword tokenizer ([WordPieceTokenizer])
+ * with the bundled vocabulary (`assets/vocab.txt`) ensuring mathematically
+ * valid BERT embeddings.
  *
  * Output: a 384-dimensional L2-normalised float array, ready for cosine-
- * similarity via sqlite-vec KNN queries.
+ * similarity via sqlite-vec or pure Kotlin fallback KNN queries.
  */
-class EmbeddingEngine(private val context: Context) {
+class EmbeddingEngine(
+    private val context: Context,
+    customTokenizer: WordPieceTokenizer? = null,
+) {
 
+    val tokenizer: WordPieceTokenizer = customTokenizer ?: WordPieceTokenizer.fromContext(context)
     private var ortEnv: OrtEnvironment? = null
     private var session: OrtSession? = null
 
-    // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Public API ───────────────────────────────────────────────────────────
 
     /**
      * Returns a 384-dim L2-normalised float embedding for [text], or null if
@@ -38,7 +42,7 @@ class EmbeddingEngine(private val context: Context) {
             val s = getOrCreateSession() ?: return@withContext null
             val env = ortEnv ?: return@withContext null
 
-            val (inputIds, attentionMask, tokenTypeIds) = tokenize(text.take(MAX_CHARS))
+            val (inputIds, attentionMask, tokenTypeIds) = tokenizer.tokenize(text.take(MAX_CHARS), MAX_TOKENS)
 
             val len = inputIds.size.toLong()
             val shape = longArrayOf(1L, len)
@@ -54,7 +58,7 @@ class EmbeddingEngine(private val context: Context) {
             )
 
             val result = s.run(inputs)
-            // MiniLM output: [1, seq_len, 384] â€” mean-pool over seq dimension
+            // MiniLM output: [1, seq_len, 384] — mean-pool over seq dimension
             val output = (result[0].value as Array<*>)[0] as Array<*>
             val pooled = meanPool(output, attentionMask)
             val normalised = l2Normalise(pooled)
@@ -76,7 +80,7 @@ class EmbeddingEngine(private val context: Context) {
         ortEnv = null
     }
 
-    // â”€â”€ Private helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     private fun getOrCreateSession(): OrtSession? {
         session?.let { return it }
@@ -88,33 +92,6 @@ class EmbeddingEngine(private val context: Context) {
         val env = OrtEnvironment.getEnvironment().also { ortEnv = it }
         val opts = OrtSession.SessionOptions()
         return env.createSession(modelBytes, opts).also { session = it }
-    }
-
-    /**
-     * Minimal whitespace tokenizer that maps text to BERT vocabulary IDs.
-     *
-     * This is a placeholder â€” replace with a full BERT WordPiece tokenizer
-     * (e.g. via a bundled vocab.txt) for production accuracy.
-     *
-     * Returns triple of (input_ids, attention_mask, token_type_ids), all Long arrays.
-     */
-    private fun tokenize(text: String): Triple<LongArray, LongArray, LongArray> {
-        val tokens = text.lowercase()
-            .split(Regex("\\s+"))
-            .filter { it.isNotBlank() }
-            .take(MAX_TOKENS - 2)  // leave room for [CLS]=101 and [SEP]=102
-
-        // Approximate IDs: CLS + hash-bucketed token IDs + SEP
-        val ids = LongArray(tokens.size + 2)
-        ids[0] = CLS_TOKEN
-        for (i in tokens.indices) {
-            ids[i + 1] = (tokens[i].hashCode().toLong().and(0x7FFF)) % VOCAB_SIZE + 1000L
-        }
-        ids[ids.size - 1] = SEP_TOKEN
-
-        val mask = LongArray(ids.size) { 1L }
-        val typeIds = LongArray(ids.size) { 0L }
-        return Triple(ids, mask, typeIds)
     }
 
     /** Mean-pools the [embeddings] sequence over unmasked positions. */
@@ -147,8 +124,8 @@ class EmbeddingEngine(private val context: Context) {
         private const val EMBEDDING_DIM = 384
         private const val MAX_TOKENS = 128
         private const val MAX_CHARS = 512
-        private const val CLS_TOKEN = 101L
-        private const val SEP_TOKEN = 102L
-        private const val VOCAB_SIZE = 30000L
+        const val CLS_TOKEN = 101L
+        const val SEP_TOKEN = 102L
+        const val VOCAB_SIZE = 30522L
     }
 }

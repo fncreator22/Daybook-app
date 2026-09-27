@@ -159,6 +159,7 @@ data class DaybookUiState(
      * Null = no NLP result yet in this session.
      */
     val lastConversationParseResult: com.sr2ma.daybook.domain.ParseResult? = null,
+    val pendingMultiActions: List<com.sr2ma.daybook.domain.ParseResult> = emptyList(),
 
     /**
      * True when the Gemma 270M model file exists and passes the fast-path size

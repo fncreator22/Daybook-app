@@ -92,6 +92,8 @@ data class Pass(
     val expiryDate: LocalDate? = null,
     val balance: String? = null,
     val imagePath: String? = null,
+    val isFavorited: Boolean = false,
+    val isArchived: Boolean = false,
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 )

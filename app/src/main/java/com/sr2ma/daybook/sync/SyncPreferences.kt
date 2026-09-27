@@ -209,6 +209,10 @@ class SyncPreferences(
         get() = prefs.getLong(KEY_LAST_GMAIL_SYNC, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_GMAIL_SYNC, value).apply()
 
+    var sampleGmailCleared: Boolean
+        get() = prefs.getBoolean(KEY_SAMPLE_GMAIL_CLEARED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SAMPLE_GMAIL_CLEARED, value).apply()
+
     // ── Sign-out ──────────────────────────────────────────────────────────────
 
     /**
@@ -268,6 +272,7 @@ class SyncPreferences(
         private const val KEY_GMAIL_FILTER_SPAM = "gmail_filter_spam"
         private const val KEY_GMAIL_FILTER_MARKETING = "gmail_filter_marketing"
         private const val KEY_LAST_GMAIL_SYNC = "last_gmail_sync"
+        private const val KEY_SAMPLE_GMAIL_CLEARED = "sample_gmail_cleared"
     }
 }
 

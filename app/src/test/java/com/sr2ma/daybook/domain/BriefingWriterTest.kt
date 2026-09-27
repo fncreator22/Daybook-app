@@ -113,4 +113,13 @@ class BriefingWriterTest {
         val text = BriefingWriter.write(b)
         assertTrue(text.contains("waiting on legal", ignoreCase = true))
     }
+
+    @Test
+    fun `generate produces the exact same output as write`() {
+        val b = board(
+            overdue = listOf(task(1, due = today.minusDays(1))),
+            completedToday = 2,
+        )
+        org.junit.Assert.assertEquals(BriefingWriter.write(b), BriefingWriter.generate(b))
+    }
 }

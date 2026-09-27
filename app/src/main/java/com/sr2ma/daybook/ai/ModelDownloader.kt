@@ -97,7 +97,11 @@ class ModelDownloader(private val context: Context) {
                     connectTimeout = 30_000
                     readTimeout = 60_000
                     setRequestProperty("User-Agent", "Daybook-ModelDownloader/1.0")
-                    if (!authToken.isNullOrBlank()) {
+                    val parsedUrl = URL(currentUrl)
+                    val isHfHost = parsedUrl.host.equals("huggingface.co", ignoreCase = true) ||
+                        (parsedUrl.host.endsWith(".huggingface.co", ignoreCase = true) && !parsedUrl.host.startsWith("cdn-lfs."))
+                    val hasPresignedAuth = parsedUrl.query?.contains("X-Amz-Signature") == true
+                    if (!authToken.isNullOrBlank() && isHfHost && !hasPresignedAuth) {
                         setRequestProperty("Authorization", "Bearer ${authToken.trim()}")
                     }
                 }

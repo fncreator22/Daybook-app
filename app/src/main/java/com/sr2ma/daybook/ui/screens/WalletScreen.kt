@@ -24,10 +24,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -92,9 +94,14 @@ fun WalletScreen(
     var showAddSheet by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var sortAlphabetical by remember { mutableStateOf(false) }
-    val favoritedPassIds = remember { mutableStateListOf<Long>() }
     var showArchivedDialog by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val docLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) viewModel.onDocumentSelected(context.applicationContext, uri)
+    }
 
     if (state.walletScanOpen) {
         CameraScreen(
@@ -107,16 +114,16 @@ fun WalletScreen(
     if (state.passes.isEmpty()) {
         WalletEmptyState(
             onScan = { viewModel.openWalletScanner() },
+            onUploadDocument = { docLauncher.launch("*/*") },
             onManual = { category -> viewModel.newPassManual(category) },
             modifier = modifier,
         )
     } else {
-        // Filter and sort passes
+        // Filter and sort passes (archived passes separated into archive shelf)
         val filteredPasses = remember(state.passes, searchQuery, sortAlphabetical) {
-            var list = if (searchQuery.isBlank()) {
-                state.passes
-            } else {
-                state.passes.filter { pass ->
+            var list = state.passes.filter { !it.isArchived }
+            if (searchQuery.isNotBlank()) {
+                list = list.filter { pass ->
                     pass.title.contains(searchQuery, ignoreCase = true) ||
                         pass.notes.contains(searchQuery, ignoreCase = true) ||
                         pass.barcodeValue.contains(searchQuery, ignoreCase = true) ||
@@ -125,6 +132,11 @@ fun WalletScreen(
             }
             if (sortAlphabetical) {
                 list = list.sortedBy { it.title.lowercase() }
+            } else {
+                list = list.sortedWith(
+                    compareByDescending<Pass> { it.isFavorited }
+                        .thenByDescending { it.updatedAt }
+                )
             }
             list
         }
@@ -266,13 +278,12 @@ fun WalletScreen(
                         initialOffsetY = { it / 3 },
                     ) + fadeIn(spring(stiffness = Spring.StiffnessMedium)),
                 ) {
-                    val isFavorite = favoritedPassIds.contains(pass.id)
+                    val isFavorite = pass.isFavorited
                     GoogleWalletPassCard(
                         pass = pass,
                         isFavorite = isFavorite,
                         onFavoriteToggle = {
-                            if (isFavorite) favoritedPassIds.remove(pass.id)
-                            else favoritedPassIds.add(pass.id)
+                            viewModel.toggleFavoritePass(pass.id)
                         },
                         onClick = { viewingPass = pass },
                     )
@@ -315,22 +326,50 @@ fun WalletScreen(
     }
 
     if (showArchivedDialog) {
-        val expiredPasses = state.passes.filter { it.expiryDate?.isBefore(LocalDate.now()) == true }
+        val archivedPasses = state.passes.filter { it.isArchived }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showArchivedDialog = false },
             title = { Text("Archived Passes") },
             text = {
-                if (expiredPasses.isEmpty()) {
-                    Text("No expired or archived passes. All your active passes are shown on the main wallet screen.")
+                if (archivedPasses.isEmpty()) {
+                    Text("No archived passes. You can archive any pass from its options menu.")
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("${expiredPasses.size} expired pass(es) preserved in secure local storage:")
-                        expiredPasses.forEach { p ->
-                            Text(
-                                text = "• ${p.title} (Expired: ${p.expiryDate})",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                    Column(
+                        modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text("${archivedPasses.size} pass(es) preserved in local archive:")
+                        archivedPasses.forEach { p ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showArchivedDialog = false
+                                        viewingPass = p
+                                    }
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = p.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    val statusText = if (p.expiryDate != null) "Archived • Exp: ${p.expiryDate}" else "Archived"
+                                    Text(
+                                        text = statusText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                androidx.compose.material3.TextButton(
+                                    onClick = { viewModel.toggleArchivePass(p.id) },
+                                ) {
+                                    Text("Restore")
+                                }
+                            }
                         }
                     }
                 }
@@ -351,13 +390,15 @@ fun WalletScreen(
         ) {
             WalletAddSheet(
                 onScan = { showAddSheet = false; viewModel.openWalletScanner() },
+                onUploadDocument = { showAddSheet = false; docLauncher.launch("*/*") },
                 onManual = { category -> showAddSheet = false; viewModel.newPassManual(category) },
             )
         }
     }
 
     // Dedicated read-only Entry Pass view
-    viewingPass?.let { pass ->
+    val currentPass = viewingPass?.let { vp -> state.passes.find { it.id == vp.id } ?: vp }
+    currentPass?.let { pass ->
         EntryPassSheet(
             pass = pass,
             userName = userName,
@@ -368,6 +409,12 @@ fun WalletScreen(
             onDelete = { p ->
                 viewingPass = null
                 viewModel.deletePass(p)
+            },
+            onToggleFavorite = { p ->
+                viewModel.toggleFavoritePass(p.id)
+            },
+            onToggleArchive = { p ->
+                viewModel.toggleArchivePass(p.id)
             },
             onDismiss = { viewingPass = null },
         )
@@ -492,6 +539,7 @@ private fun GoogleWalletPassCard(
 @Composable
 private fun WalletEmptyState(
     onScan: () -> Unit,
+    onUploadDocument: () -> Unit = {},
     onManual: (PassCategory) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -544,6 +592,7 @@ private fun WalletEmptyState(
         ) {
             WalletAddSheet(
                 onScan = { showAddSheet = false; onScan() },
+                onUploadDocument = { showAddSheet = false; onUploadDocument() },
                 onManual = { category -> showAddSheet = false; onManual(category) },
             )
         }
@@ -553,7 +602,11 @@ private fun WalletEmptyState(
 // ── Add to Wallet bottom sheet — matches Google Wallet "Add to Wallet" UI ────
 
 @Composable
-fun WalletAddSheet(onScan: () -> Unit, onManual: (PassCategory) -> Unit) {
+fun WalletAddSheet(
+    onScan: () -> Unit,
+    onUploadDocument: () -> Unit = {},
+    onManual: (PassCategory) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -567,9 +620,15 @@ fun WalletAddSheet(onScan: () -> Unit, onManual: (PassCategory) -> Unit) {
         )
         WalletAddRow(
             iconRes = R.drawable.ic_pass_other,
-            titleRes = R.string.pass_cat_other,
+            titleRes = R.string.wallet_add_scan,
             subtitleRes = R.string.wallet_add_other_desc,
             onClick = onScan,
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_import,
+            titleRes = R.string.wallet_add_upload,
+            subtitleRes = R.string.wallet_add_document_desc,
+            onClick = onUploadDocument,
         )
         WalletAddRow(
             iconRes = R.drawable.ic_pass_loyalty,
@@ -600,6 +659,18 @@ fun WalletAddSheet(onScan: () -> Unit, onManual: (PassCategory) -> Unit) {
             titleRes = R.string.pass_cat_health,
             subtitleRes = R.string.wallet_add_health_desc,
             onClick = { onManual(PassCategory.HEALTH) },
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_today,
+            titleRes = R.string.pass_cat_document,
+            subtitleRes = R.string.wallet_add_document_desc,
+            onClick = { onManual(PassCategory.DOCUMENT) },
+        )
+        WalletAddRow(
+            iconRes = R.drawable.ic_pass_other,
+            titleRes = R.string.pass_cat_other,
+            subtitleRes = R.string.wallet_add_other_desc,
+            onClick = { onManual(PassCategory.OTHER) },
         )
     }
 }
@@ -658,6 +729,7 @@ fun categoryIcon(category: PassCategory): Int = when (category) {
     PassCategory.GIFT_CARD    -> R.drawable.ic_pass_gift
     PassCategory.ID           -> R.drawable.ic_pass_id
     PassCategory.HEALTH       -> R.drawable.ic_pass_health
+    PassCategory.DOCUMENT     -> R.drawable.ic_today
     PassCategory.OTHER        -> R.drawable.ic_pass_other
 }
 
@@ -668,6 +740,7 @@ fun categoryLabelString(category: PassCategory): String = when (category) {
     PassCategory.GIFT_CARD    -> "Gift Card"
     PassCategory.ID           -> "ID Card"
     PassCategory.HEALTH       -> "Health Pass"
+    PassCategory.DOCUMENT     -> "Document"
     PassCategory.OTHER        -> "Pass"
 }
 
@@ -680,6 +753,7 @@ fun categoryLabel(category: PassCategory): String = stringResource(
         PassCategory.GIFT_CARD    -> R.string.pass_cat_gift_card
         PassCategory.ID           -> R.string.pass_cat_id
         PassCategory.HEALTH       -> R.string.pass_cat_health
+        PassCategory.DOCUMENT     -> R.string.pass_cat_document
         PassCategory.OTHER        -> R.string.pass_cat_other
     },
 )
