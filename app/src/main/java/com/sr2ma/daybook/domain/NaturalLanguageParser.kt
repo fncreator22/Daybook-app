@@ -14,6 +14,7 @@ enum class ParsedIntent {
     CREATE_LOG,
     CREATE_MEETING,
     CONVERSATION,
+    QUERY_SCHEDULE,
     UNKNOWN,
 }
 
@@ -122,6 +123,7 @@ object NaturalLanguageParser {
 
         // Order matters: most-specific patterns first to avoid false positives.
         detectConversationalIntent(lower, trimmed)?.let { return it }
+        detectScheduleQueryIntent(lower)?.let { return it }
         detectMeetingIntent(lower, trimmed, referenceDate)?.let { return it }
         detectLogIntent(lower, trimmed)?.let { return it }
         detectExplicitTaskIntent(lower, trimmed, referenceDate)?.let { return it }
@@ -143,7 +145,41 @@ object NaturalLanguageParser {
         )
     }
 
-    // ── Conversational intent detection ───────────────────────────────────────
+    // ── Conversational & Schedule Query intent detection ────────────────────────
+
+    private fun detectScheduleQueryIntent(lower: String): ParseResult? {
+        val clean = lower.trimEnd('?', '!', '.', ' ')
+        val isTodayQuery = clean.contains("today") || clean.contains("schedule") ||
+            clean.contains("on my plate") || clean.contains("going on") ||
+            clean.contains("in progress") || clean.contains("need to know") ||
+            clean.contains("have to do") || clean.contains("agenda") ||
+            clean.contains("briefing") || clean.contains("my tasks") ||
+            clean.contains("my meetings") || clean.contains("my logs") ||
+            clean.contains("reminders")
+
+        if (!isTodayQuery) return null
+
+        val isCreation = clean.startsWith("add ") || clean.startsWith("create ") ||
+            clean.startsWith("schedule a ") || clean.startsWith("schedule meeting ") ||
+            clean.startsWith("remind me to ") || clean.startsWith("note: ")
+
+        if (isCreation) return null
+
+        val queryPatterns = listOf(
+            Regex(".*\\b(what\\s+(do\\s+i|have\\s+i|should\\s+i)\\s+have\\s+to\\s+do|what\\s+to\\s+do)\\b.*"),
+            Regex(".*\\b(tell\\s+me|show\\s+me|what\\s+are|what\\s+is|what's|whats|any)\\b.*\\b(something\\s+that\\s+i\\s+have\\s+to\\s+do|tasks?|meetings?|schedule|agenda|logs?|reminders?|briefing|plan|plate)\\b.*"),
+            Regex(".*\\b(do\\s+you\\s+want\\s+to\\s+tell\\s+me|can\\s+you\\s+tell\\s+me|tell\\s+me)\\b.*\\b(to\\s+do|today|schedule|agenda|plan)\\b.*"),
+            Regex(".*\\b(what\\s+is|what's|whats|show|view)\\b.*\\b(schedule|agenda|plan|today)\\b.*"),
+            Regex(".*\\b(do\\s+i\\s+have\\s+any|any)\\b.*\\b(tasks?|meetings?|reminders?|calls?|plans?)\\b.*"),
+            Regex(".*\\b(what\\s+(tasks?|meetings?|logs?)\\s+(are\\s+there|are\\s+currently|do\\s+i\\s+have|are\\s+going\\s+on|in\\s+progress))\\b.*"),
+            Regex(".*\\b(what\\s+do\\s+i\\s+need\\s+to\\s+know)\\b.*"),
+        )
+
+        if (queryPatterns.any { it.matches(clean) }) {
+            return ParseResult(intent = ParsedIntent.QUERY_SCHEDULE)
+        }
+        return null
+    }
 
     private val GREETING_REGEX = Regex(
         "^(hi|hello|hey|howdy|good\\s+(morning|afternoon|evening|day))\\b[\\s!,.]*$",
@@ -155,7 +191,7 @@ object NaturalLanguageParser {
         if (GREETING_REGEX.matches(clean)) {
             return ParseResult(
                 intent = ParsedIntent.CONVERSATION,
-                conversationReply = "Hello! How can I help you today? You can ask me to schedule meetings, add tasks, or record daily logs.",
+                conversationReply = "Hello! How can I help you today? You can ask me to schedule meetings, add tasks, check your agenda, or record daily logs.",
             )
         }
         if (clean.contains("how are you") || clean.contains("how're you") || clean.contains("how are u") || clean == "what's up" || clean == "whats up") {
@@ -173,7 +209,7 @@ object NaturalLanguageParser {
         if (clean.contains("what can you do") || clean.contains("what are you capable of") || clean == "help") {
             return ParseResult(
                 intent = ParsedIntent.CONVERSATION,
-                conversationReply = "You can talk or type to me to add tasks, schedule meetings, record work logs, and import passes. You can also give me multiple items in a single sentence!",
+                conversationReply = "You can talk or type to me to add tasks, schedule meetings, check today's agenda, record work logs, and import passes.",
             )
         }
         if (clean.startsWith("thanks") || clean.startsWith("thank you")) {
@@ -186,10 +222,14 @@ object NaturalLanguageParser {
     }
 
     private fun isPureQuestion(lower: String): Boolean {
-        if (!lower.endsWith("?")) return false
-        val questionStarters = listOf("what is", "what are", "how do", "can you", "could you", "tell me", "where is", "why is", "who is")
+        val clean = lower.trimEnd('?', '!', '.', ' ')
+        val isQuestion = lower.endsWith("?") || clean.startsWith("what ") || clean.startsWith("who ") ||
+            clean.startsWith("where ") || clean.startsWith("why ") || clean.startsWith("how ") ||
+            clean.startsWith("can you ") || clean.startsWith("could you ") || clean.startsWith("tell me ")
+        if (!isQuestion) return false
+        val questionStarters = listOf("what is", "what are", "how do", "how can", "can you", "could you", "tell me", "where is", "why is", "who is")
         val hasTaskVerb = listOf("remind", "call", "schedule", "create", "add", "buy", "send", "review", "fix", "write").any { lower.contains(it) }
-        return questionStarters.any { lower.startsWith(it) } && !hasTaskVerb
+        return questionStarters.any { clean.startsWith(it) } && !hasTaskVerb
     }
 
     // ── Time extraction ──────────────────────────────────────────────────────

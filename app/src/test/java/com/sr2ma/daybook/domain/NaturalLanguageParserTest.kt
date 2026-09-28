@@ -259,4 +259,27 @@ class NaturalLanguageParserTest {
         assertTrue(results.any { it.intent == ParsedIntent.CREATE_TASK })
         assertTrue(results.any { it.intent == ParsedIntent.CREATE_MEETING })
     }
+
+    // ── Schedule & Agenda queries ─────────────────────────────────────────────
+
+    @Test
+    fun `schedule query utterances are correctly recognized as QUERY_SCHEDULE`() {
+        val queries = listOf(
+            "do you want to tell me something that I have to do today?",
+            "what do I have to do today?",
+            "tell me what I have to do today",
+            "what are my tasks for today",
+            "what's on my plate today",
+            "show me my schedule",
+            "what tasks are currently going on",
+            "any reminders for today?",
+            "do I have any meetings today?",
+            "what is today's agenda",
+        )
+
+        for (q in queries) {
+            val result = NaturalLanguageParser.parse(q)
+            assertEquals("Failed for query: '$q'", ParsedIntent.QUERY_SCHEDULE, result.intent)
+        }
+    }
 }

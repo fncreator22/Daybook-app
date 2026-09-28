@@ -32,6 +32,7 @@ fun ConnectivityStatusDialog(
     isOnline: Boolean,
     connectionType: String,
     lastAccessFormatted: String,
+    lastSyncDiff: String? = null,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -99,6 +100,25 @@ fun ConnectivityStatusDialog(
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                }
+
+                if (!lastSyncDiff.isNullOrBlank()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "Last Gmail Sync Diff:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = lastSyncDiff,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
 
                 Surface(

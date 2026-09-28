@@ -91,6 +91,8 @@ import android.net.Uri
 import androidx.compose.foundation.clickable
 import com.sr2ma.daybook.domain.NaturalLanguageParser
 import com.sr2ma.daybook.domain.ParsedIntent
+import com.sr2ma.daybook.sync.GmailSyncEngine
+import androidx.compose.material3.OutlinedButton
 
 /**
  * The landing screen: one scrollable day, bucketed by what it is asking of you.
@@ -113,10 +115,37 @@ fun TodayScreen(
     var viewingPass by remember { mutableStateOf<Pass?>(null) }
     var viewingMeeting by remember { mutableStateOf<Meeting?>(null) }
     var viewingTask by remember { mutableStateOf<Task?>(null) }
+    var viewingGmailMessage by remember { mutableStateOf<GmailMessage?>(null) }
+    var viewingWhatsAppMessage by remember { mutableStateOf<WhatsAppMessage?>(null) }
     var showConnectivityDialog by remember { mutableStateOf(false) }
     var showBriefingSheet by remember { mutableStateOf(false) }
     var dismissedSuggestionKeys by rememberSaveable { mutableStateOf(listOf<String>()) }
     var completedExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val visibleGmailMessages = remember(state.recentGmailMessages, state.tasks, state.meetings, state.today) {
+        state.recentGmailMessages.filter { msg ->
+            if (msg.actionedAt != null) {
+                val relatedTask = state.tasks.find { it.notes.contains("[msgId:${msg.messageId}]") }
+                if (relatedTask != null && relatedTask.status == com.sr2ma.daybook.domain.model.TaskStatus.DONE) {
+                    return@filter false
+                }
+                val relatedMeeting = state.meetings.find { it.notes.contains("[msgId:${msg.messageId}]") }
+                if (relatedMeeting != null && relatedMeeting.day < state.today) {
+                    return@filter false
+                }
+                val dayInMillis = 24 * 60 * 60 * 1000L
+                if (System.currentTimeMillis() - msg.actionedAt > dayInMillis) {
+                    return@filter false
+                }
+            } else {
+                val (extractedDate, _) = GmailSyncEngine.extractDateTime(msg.subject, msg.snippet, state.today)
+                if (extractedDate != null && extractedDate < state.today) {
+                    return@filter false
+                }
+            }
+            true
+        }
+    }
 
     val activeSuggestions = remember(board.suggestions, dismissedSuggestionKeys) {
         board.suggestions.filter { suggestion ->
@@ -130,6 +159,7 @@ fun TodayScreen(
             isOnline = isOnline,
             connectionType = connectionType,
             lastAccessFormatted = lastAccessFormatted,
+            lastSyncDiff = viewModel.syncPreferences?.lastGmailSyncDiffSummary,
             onDismiss = { showConnectivityDialog = false },
         )
     }
@@ -178,6 +208,10 @@ fun TodayScreen(
             onToggleFollowUp = { meetingToToggle ->
                 viewModel.toggleFollowUpDone(meetingToToggle)
             },
+            onDelete = { meetingToDelete ->
+                viewingMeeting = null
+                viewModel.deleteMeeting(meetingToDelete)
+            },
             onDismiss = { viewingMeeting = null },
         )
     }
@@ -194,7 +228,53 @@ fun TodayScreen(
             onToggleDone = { taskToToggle ->
                 viewModel.toggleTaskDone(taskToToggle)
             },
+            onDelete = { taskToDelete ->
+                viewingTask = null
+                viewModel.deleteTask(taskToDelete)
+            },
             onDismiss = { viewingTask = null },
+        )
+    }
+
+    val currentGmail = viewingGmailMessage?.let { gm -> state.recentGmailMessages.find { it.id == gm.id } ?: gm }
+    currentGmail?.let { msg ->
+        GmailCardSheet(
+            message = msg,
+            today = state.today,
+            onAddTask = { message ->
+                viewModel.convertGmailToTask(message)
+                viewingGmailMessage = null
+            },
+            onAddMeeting = { message ->
+                viewModel.convertGmailToMeeting(message)
+                viewingGmailMessage = null
+            },
+            onDismissMessage = { message ->
+                viewModel.dismissGmailMessage(message)
+                viewingGmailMessage = null
+            },
+            onDismiss = { viewingGmailMessage = null },
+        )
+    }
+
+    val currentWhatsApp = viewingWhatsAppMessage?.let { wm -> state.recentWhatsAppMessages.find { it.id == wm.id } ?: wm }
+    currentWhatsApp?.let { msg ->
+        WhatsAppCardSheet(
+            message = msg,
+            today = state.today,
+            onAddTask = { message ->
+                viewModel.convertWhatsAppToTask(message)
+                viewingWhatsAppMessage = null
+            },
+            onAddMeeting = { message ->
+                viewModel.convertWhatsAppToMeeting(message)
+                viewingWhatsAppMessage = null
+            },
+            onDismissMessage = { message ->
+                viewModel.dismissWhatsAppMessage(message)
+                viewingWhatsAppMessage = null
+            },
+            onDismiss = { viewingWhatsAppMessage = null },
         )
     }
 
@@ -627,12 +707,15 @@ fun TodayScreen(
         whatsAppSection(
             messages = state.recentWhatsAppMessages,
             onConvert = viewModel::convertWhatsAppAction,
+            onDismiss = viewModel::dismissWhatsAppMessage,
+            onCardClick = { viewingWhatsAppMessage = it },
         )
         gmailSection(
-            messages = state.recentGmailMessages,
+            messages = visibleGmailMessages,
             onConvert = viewModel::convertGmailAction,
             onDismiss = viewModel::dismissGmailMessage,
             onClearSamples = viewModel::clearSampleGmailMessages,
+            onCardClick = { viewingGmailMessage = it },
         )
         if (board.completedTasks.isNotEmpty()) {
             completedTodaySection(
@@ -684,6 +767,8 @@ private fun LazyListScope.logSection(
 private fun LazyListScope.whatsAppSection(
     messages: List<WhatsAppMessage>,
     onConvert: (WhatsAppMessage) -> Unit,
+    onDismiss: (WhatsAppMessage) -> Unit,
+    onCardClick: ((WhatsAppMessage) -> Unit)? = null,
 ) {
     if (messages.isEmpty()) return
     item(key = "whatsapp-header") {
@@ -693,7 +778,7 @@ private fun LazyListScope.whatsAppSection(
         )
     }
     items(items = messages, key = { "wa-${it.id}" }) { msg ->
-        WhatsAppMessageCard(msg = msg, onConvert = onConvert)
+        WhatsAppMessageCard(msg = msg, onConvert = onConvert, onDismiss = onDismiss, onCardClick = onCardClick)
     }
 }
 
@@ -701,12 +786,16 @@ private fun LazyListScope.whatsAppSection(
 private fun WhatsAppMessageCard(
     msg: WhatsAppMessage,
     onConvert: (WhatsAppMessage) -> Unit,
+    onDismiss: (WhatsAppMessage) -> Unit,
+    onCardClick: ((WhatsAppMessage) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val parsed = remember(msg.message) { NaturalLanguageParser.parse(msg.message) }
     val isActionable = parsed.intent != ParsedIntent.UNKNOWN && parsed.intent != ParsedIntent.CONVERSATION
 
-    DaybookCard {
+    DaybookCard(
+        onClick = if (onCardClick != null) { { onCardClick(msg) } } else null,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -744,6 +833,12 @@ private fun WhatsAppMessageCard(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                TextButton(
+                    onClick = { onDismiss(msg) },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text("Dismiss", style = MaterialTheme.typography.labelSmall)
+                }
                 if (isActionable) {
                     Button(
                         onClick = { onConvert(msg) },
@@ -967,6 +1062,7 @@ private fun LazyListScope.gmailSection(
     onConvert: (GmailMessage) -> Unit,
     onDismiss: (GmailMessage) -> Unit,
     onClearSamples: () -> Unit,
+    onCardClick: ((GmailMessage) -> Unit)? = null,
 ) {
     if (messages.isEmpty()) return
     item(key = "gmail-header") {
@@ -1004,7 +1100,7 @@ private fun LazyListScope.gmailSection(
         }
     }
     items(items = messages, key = { "gmail-${it.id}" }) { msg ->
-        GmailMessageCard(msg = msg, onConvert = onConvert, onDismiss = onDismiss)
+        GmailMessageCard(msg = msg, onConvert = onConvert, onDismiss = onDismiss, onCardClick = onCardClick)
     }
 }
 
@@ -1013,6 +1109,7 @@ private fun GmailMessageCard(
     msg: GmailMessage,
     onConvert: (GmailMessage) -> Unit,
     onDismiss: (GmailMessage) -> Unit,
+    onCardClick: ((GmailMessage) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
@@ -1021,7 +1118,7 @@ private fun GmailMessageCard(
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded }
+            .clickable { onCardClick?.invoke(msg) ?: run { expanded = !expanded } }
     ) {
         Column(
             modifier = Modifier
@@ -1126,6 +1223,26 @@ private fun GmailMessageCard(
                             )
                         }
                     }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (msg.actionedAt != null) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFE6F4EA),
+                                modifier = Modifier.padding(end = 8.dp),
+                            ) {
+                                Text(
+                                    text = "Added",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF137333),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                        TextButton(onClick = { onDismiss(msg) }) {
+                            Text(if (msg.actionedAt != null) "Remove" else "Dismiss", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             }
         }
@@ -1228,7 +1345,7 @@ private fun LazyListScope.completedTodaySection(
     onToggleExpand: () -> Unit,
     today: LocalDate,
     viewModel: DaybookViewModel,
-    @Suppress("UNUSED_PARAMETER") onTaskClick: ((Task) -> Unit)? = null,
+    onTaskClick: ((Task) -> Unit)? = null,
 ) {
     if (tasks.isEmpty()) return
     item(key = "completed-today-header") {
@@ -1279,7 +1396,7 @@ private fun LazyListScope.completedTodaySection(
                 task = task,
                 today = today,
                 onToggleDone = { viewModel.toggleTaskDone(task) },
-                onClick = { viewModel.toggleTaskDone(task) },
+                onClick = { onTaskClick?.invoke(task) ?: viewModel.toggleTaskDone(task) },
             )
         }
     }

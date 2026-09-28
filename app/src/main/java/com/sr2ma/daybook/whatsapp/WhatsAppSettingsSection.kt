@@ -13,6 +13,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.sr2ma.daybook.ui.components.DaybookCard
 import com.sr2ma.daybook.ui.components.SectionHeader
 
@@ -36,6 +40,7 @@ import com.sr2ma.daybook.ui.components.SectionHeader
 @Composable
 fun WhatsAppSettingsSection() {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val prefs = remember {
         context.getSharedPreferences(WhatsAppListenerService.PREFS_NAME, Context.MODE_PRIVATE)
     }
@@ -47,7 +52,21 @@ fun WhatsAppSettingsSection() {
 
     var showRestrictedHelp by remember { mutableStateOf(false) }
 
-    val hasPermission = WhatsAppListenerService.isPermissionGranted(context)
+    var hasPermission by remember {
+        mutableStateOf(WhatsAppListenerService.isPermissionGranted(context))
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasPermission = WhatsAppListenerService.isPermissionGranted(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Spacer(Modifier.height(8.dp))
     SectionHeader(

@@ -60,6 +60,28 @@ fun TasksScreen(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    var viewingTask by remember { mutableStateOf<Task?>(null) }
+
+    val currentTask = viewingTask?.let { vt -> state.tasks.find { it.id == vt.id } ?: vt }
+    currentTask?.let { task ->
+        TaskCardSheet(
+            task = task,
+            today = state.today,
+            onEdit = { taskToEdit ->
+                viewingTask = null
+                viewModel.editTask(taskToEdit)
+            },
+            onDelete = { taskToDelete ->
+                viewingTask = null
+                viewModel.deleteTask(taskToDelete)
+            },
+            onToggleDone = { taskToToggle ->
+                viewModel.toggleTaskDone(taskToToggle)
+            },
+            onDismiss = { viewingTask = null },
+        )
+    }
+
     // A filter, sort or search change swaps the whole list out from under the
     // scroll position, and being forty rows down a list that is now three rows
     // long looks like an empty screen. Deliberately not keyed on the tasks
@@ -123,6 +145,7 @@ fun TasksScreen(
                         tasks = group.tasks,
                         state = state,
                         viewModel = viewModel,
+                        onTaskClick = { viewingTask = it },
                     )
                 }
 
@@ -134,7 +157,7 @@ fun TasksScreen(
                         task = task,
                         today = state.today,
                         onToggleDone = { viewModel.toggleTaskDone(task) },
-                        onClick = { viewModel.editTask(task) },
+                        onClick = { viewingTask = task },
                     )
                 }
             }
@@ -148,6 +171,7 @@ private fun LazyListScope.projectGroup(
     tasks: List<Task>,
     state: DaybookUiState,
     viewModel: DaybookViewModel,
+    onTaskClick: (Task) -> Unit,
 ) {
     // Null and blank both mean "no project", and a heading has to say something.
     val heading = project.orEmpty()
@@ -162,7 +186,7 @@ private fun LazyListScope.projectGroup(
             task = task,
             today = state.today,
             onToggleDone = { viewModel.toggleTaskDone(task) },
-            onClick = { viewModel.editTask(task) },
+            onClick = { onTaskClick(task) },
             showProject = false,
         )
     }

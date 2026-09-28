@@ -44,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHost
@@ -258,11 +259,37 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
         ListeningSheet(message = state.voiceRetryMessage, onStop = viewModel::onVoiceStop)
     }
 
-    // Confirmation sheet shown after recognition completes.
     if (state.voiceResult != null) {
         VoiceResultSheet(
             result = state.voiceResult!!,
             onConfirm = viewModel::confirmVoiceResult,
+            onAddTask = {
+                viewModel.commitParsedIntent(
+                    state.voiceResult!!.spokenText,
+                    state.voiceResult!!.parseResult.copy(intent = ParsedIntent.CREATE_TASK, taskTitle = state.voiceResult!!.spokenText),
+                )
+                viewModel.dismissVoiceResult()
+            },
+            onAddMeeting = {
+                viewModel.commitParsedIntent(
+                    state.voiceResult!!.spokenText,
+                    state.voiceResult!!.parseResult.copy(intent = ParsedIntent.CREATE_MEETING, meetingTitle = state.voiceResult!!.spokenText),
+                )
+                viewModel.dismissVoiceResult()
+            },
+            onAddLog = {
+                viewModel.commitParsedIntent(
+                    state.voiceResult!!.spokenText,
+                    state.voiceResult!!.parseResult.copy(intent = ParsedIntent.CREATE_LOG, logBody = state.voiceResult!!.spokenText),
+                )
+                viewModel.dismissVoiceResult()
+            },
+            onChatWithAgent = {
+                val text = state.voiceResult!!.spokenText
+                viewModel.dismissVoiceResult()
+                viewModel.openConversation()
+                viewModel.sendConversationMessage(text)
+            },
             onDismiss = viewModel::dismissVoiceResult,
         )
     }
@@ -852,11 +879,16 @@ private fun ListeningSheet(message: String?, onStop: () -> Unit) {
 private fun VoiceResultSheet(
     result: VoiceAgentResult,
     onConfirm: () -> Unit,
+    onAddTask: () -> Unit,
+    onAddMeeting: () -> Unit,
+    onAddLog: () -> Unit,
+    onChatWithAgent: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val parsed = result.parseResult
 
+    val isRecognized = parsed.intent != ParsedIntent.UNKNOWN
     val intentLabel = when (parsed.intent) {
         ParsedIntent.CREATE_TASK ->
             stringResource(R.string.voice_intent_task, parsed.taskTitle ?: result.spokenText)
@@ -866,8 +898,10 @@ private fun VoiceResultSheet(
             stringResource(R.string.voice_intent_meeting, parsed.meetingTitle ?: result.spokenText)
         ParsedIntent.CONVERSATION ->
             parsed.conversationReply ?: result.spokenText
+        ParsedIntent.QUERY_SCHEDULE ->
+            parsed.conversationReply ?: "Today's Agenda & Schedule"
         ParsedIntent.UNKNOWN ->
-            stringResource(R.string.voice_intent_task, result.spokenText)
+            "Pick how you want to save or process this:"
     }
 
     ModalBottomSheet(
@@ -880,7 +914,7 @@ private fun VoiceResultSheet(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
             Text(
-                text = if (parsed.intent == ParsedIntent.CONVERSATION) "Daybook Assistant" else "Confirm Action",
+                text = if (parsed.intent == ParsedIntent.CONVERSATION || parsed.intent == ParsedIntent.QUERY_SCHEDULE) "Daybook Assistant" else if (isRecognized) "Confirm Action" else "Choose Action",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -932,14 +966,53 @@ private fun VoiceResultSheet(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.voice_result_dismiss))
+            Spacer(Modifier.height(20.dp))
+
+            if (isRecognized) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.voice_result_dismiss))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = onConfirm, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.voice_result_confirm))
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = onConfirm, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.voice_result_confirm))
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onAddTask,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("+ Task", style = MaterialTheme.typography.labelSmall)
+                    }
+                    OutlinedButton(
+                        onClick = onAddMeeting,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("+ Meeting", style = MaterialTheme.typography.labelSmall)
+                    }
+                    OutlinedButton(
+                        onClick = onAddLog,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("+ Log", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Dismiss")
+                    }
+                    Button(onClick = onChatWithAgent) {
+                        Text("Ask Assistant")
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))

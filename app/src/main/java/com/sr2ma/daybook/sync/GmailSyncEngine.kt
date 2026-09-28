@@ -115,9 +115,18 @@ class GmailSyncEngine(
                 readTimeout = 10_000
             }
 
-            val responseCode = conn.responseCode
-            if (responseCode == 200) {
-                val jsonResponse = conn.inputStream.bufferedReader().use { it.readText() }
+            val responseCode: Int
+            val jsonResponse: String?
+            try {
+                responseCode = conn.responseCode
+                jsonResponse = if (responseCode == 200) {
+                    conn.inputStream.bufferedReader().use { it.readText() }
+                } else null
+            } finally {
+                conn.disconnect()
+            }
+
+            if (responseCode == 200 && jsonResponse != null) {
                 val root = JSONObject(jsonResponse)
                 val messagesArray = root.optJSONArray("messages")
 
@@ -139,49 +148,54 @@ class GmailSyncEngine(
                             readTimeout = 8_000
                         }
 
-                        if (detailConn.responseCode == 200) {
-                            val detailJson = detailConn.inputStream.bufferedReader().use { it.readText() }
-                            val detail = JSONObject(detailJson)
-                            val snippet = detail.optString("snippet", "")
-                            val internalDate = detail.optLong("internalDate", System.currentTimeMillis())
+                        try {
+                            if (detailConn.responseCode == 200) {
+                                val detailJson = detailConn.inputStream.bufferedReader().use { it.readText() }
+                                val detail = JSONObject(detailJson)
+                                val snippet = detail.optString("snippet", "")
+                                val internalDate = detail.optLong("internalDate", System.currentTimeMillis())
 
-                            var from = "Unknown"
-                            var subject = "No subject"
+                                var from = "Unknown"
+                                var subject = "No subject"
 
-                            val headers = detail.optJSONObject("payload")?.optJSONArray("headers")
-                            if (headers != null) {
-                                for (h in 0 until headers.length()) {
-                                    val header = headers.getJSONObject(h)
-                                    val name = header.optString("name")
-                                    val value = header.optString("value")
-                                    if (name.equals("From", ignoreCase = true)) from = value
-                                    if (name.equals("Subject", ignoreCase = true)) subject = value
+                                val headers = detail.optJSONObject("payload")?.optJSONArray("headers")
+                                if (headers != null) {
+                                    for (h in 0 until headers.length()) {
+                                        val header = headers.getJSONObject(h)
+                                        val name = header.optString("name")
+                                        val value = header.optString("value")
+                                        if (name.equals("From", ignoreCase = true)) from = value
+                                        if (name.equals("Subject", ignoreCase = true)) subject = value
+                                    }
                                 }
+
+                                // Classify category (primary, updates, promotions, spam)
+                                val category = classifyCategory(from, subject, snippet)
+
+                                // Extract action suggestion via NLP
+                                val suggestion = extractActionSuggestion(subject, snippet, referenceDate)
+                                if (suggestion != null) actionable++
+
+                                val msg = GmailMessage(
+                                    messageId = msgId,
+                                    sender = cleanSenderName(from),
+                                    subject = subject,
+                                    snippet = snippet,
+                                    receivedAt = internalDate,
+                                    isRead = false,
+                                    category = category,
+                                    suggestedAction = suggestion,
+                                )
+                                gmailDao?.insertOrIgnore(msg)
+                                fetched++
                             }
-
-                            // Classify category (primary, updates, promotions, spam)
-                            val category = classifyCategory(from, subject, snippet)
-
-                            // Extract action suggestion via NLP
-                            val suggestion = extractActionSuggestion(subject, snippet, referenceDate)
-                            if (suggestion != null) actionable++
-
-                            val msg = GmailMessage(
-                                messageId = msgId,
-                                sender = cleanSenderName(from),
-                                subject = subject,
-                                snippet = snippet,
-                                receivedAt = internalDate,
-                                isRead = false,
-                                category = category,
-                                suggestedAction = suggestion,
-                            )
-                            gmailDao?.insertOrIgnore(msg)
-                            fetched++
+                        } finally {
+                            detailConn.disconnect()
                         }
                     }
                 }
                 syncPrefs.lastGmailSyncAt = System.currentTimeMillis()
+                com.sr2ma.daybook.logging.DaybookLogger.i(null, "GmailSync", "Sync completed: $fetched fetched, $actionable actionable")
                 SyncResult.Success(fetchedCount = fetched, actionableCount = actionable)
             } else if (responseCode == 401) {
                 SyncResult.Error("Google Auth session expired. Please sign in again.")
@@ -272,5 +286,87 @@ class GmailSyncEngine(
         // e.g. "John Doe <john@example.com>" -> "John Doe"
         val angleIdx = from.indexOf('<')
         return if (angleIdx > 0) from.substring(0, angleIdx).trim('"', ' ') else from.trim()
+    }
+
+    companion object {
+        fun extractTopics(subject: String, snippet: String): List<String> {
+            val topics = mutableListOf<String>()
+            val bracketRegex = Regex("\\[([A-Za-z0-9_ /-]+)\\]")
+            bracketRegex.findAll(subject).forEach {
+                val tag = it.groupValues[1].trim()
+                if (tag.isNotEmpty() && !tag.equals("Sample", ignoreCase = true)) {
+                    topics.add(tag)
+                    if (tag.contains("/")) {
+                        tag.split("/").map { p -> p.trim() }.filter { p -> p.isNotEmpty() }.forEach { p -> topics.add(p) }
+                    }
+                }
+            }
+            val hashRegex = Regex("#([A-Za-z0-9_/-]+)")
+            hashRegex.findAll("$subject $snippet").forEach {
+                val tag = it.groupValues[1].trim()
+                if (tag.isNotEmpty()) {
+                    topics.add(tag)
+                    if (tag.contains("/")) {
+                        tag.split("/").map { p -> p.trim() }.filter { p -> p.isNotEmpty() }.forEach { p -> topics.add(p) }
+                    }
+                }
+            }
+            val keywords = listOf("Roadmap", "Design", "Engineering", "Marketing", "Finance", "Budget", "Security", "Launch", "Release", "Sprint", "Backend", "Frontend", "QA")
+            for (k in keywords) {
+                if ("$subject $snippet".contains(k, ignoreCase = true) && !topics.contains(k)) {
+                    topics.add(k)
+                }
+            }
+            return topics.distinct()
+        }
+
+        fun extractLocation(subject: String, snippet: String): String? {
+            val combined = "$subject $snippet"
+            val locationRegex = Regex("(?i)\\b(?:in|at|on)\\s+(Zoom|Google Meet|Meet|Teams|Room\\s+[A-Za-z0-9]+|Office|Cafeteria|Starbucks)\\b")
+            val match = locationRegex.find(combined)
+            if (match != null) {
+                val rawLoc = match.groupValues[1].trim()
+                if (rawLoc.equals("zoom", ignoreCase = true)) return "Zoom"
+                if (rawLoc.equals("google meet", ignoreCase = true) || rawLoc.equals("meet", ignoreCase = true)) return "Google Meet"
+                if (rawLoc.equals("teams", ignoreCase = true)) return "Microsoft Teams"
+                if (rawLoc.startsWith("room", ignoreCase = true)) {
+                    val parts = rawLoc.split("\\s+".toRegex(), 2)
+                    return "Room " + (parts.getOrNull(1)?.uppercase() ?: "")
+                }
+                return rawLoc.replaceFirstChar { it.uppercase() }
+            }
+            if (combined.contains("zoom", ignoreCase = true)) return "Zoom"
+            if (combined.contains("google meet", ignoreCase = true) || combined.contains("meet.google", ignoreCase = true)) return "Google Meet"
+            if (combined.contains("teams", ignoreCase = true)) return "Microsoft Teams"
+            return null
+        }
+
+        fun extractDateTime(subject: String, snippet: String, referenceDate: LocalDate): Pair<LocalDate?, java.time.LocalTime?> {
+            val candidate = if (subject.isNotBlank() && subject != "No subject") "$subject $snippet" else snippet
+            val parsed = NaturalLanguageParser.parse(candidate, referenceDate)
+            return Pair(parsed.dueDate, parsed.meetingTime)
+        }
+
+        fun buildTaskNotes(
+            msg: GmailMessage,
+            topics: List<String>,
+            location: String?,
+            dateTimeStr: String? = null,
+        ): String {
+            val sb = StringBuilder()
+            sb.append("Source: Email from ${msg.sender} [msgId:${msg.messageId}]\n")
+            sb.append("Subject: ${msg.subject}\n")
+            if (topics.isNotEmpty()) {
+                sb.append("Topics: ${topics.joinToString(", ")}\n")
+            }
+            if (!location.isNullOrBlank()) {
+                sb.append("Location: $location\n")
+            }
+            if (!dateTimeStr.isNullOrBlank()) {
+                sb.append("Time: $dateTimeStr\n")
+            }
+            sb.append("\n${msg.snippet.trim()}")
+            return sb.toString().trim()
+        }
     }
 }
