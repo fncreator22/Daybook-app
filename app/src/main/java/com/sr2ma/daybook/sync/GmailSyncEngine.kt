@@ -42,7 +42,7 @@ class GmailSyncEngine(
 
         // ── Offline Profile Mode: Extract actions across verified emails ──────────
         if (token.startsWith("offline_")) {
-            if (syncPrefs.sampleGmailCleared) {
+            if (!syncPrefs.demoDataEnabled || syncPrefs.sampleGmailCleared) {
                 syncPrefs.lastGmailSyncAt = System.currentTimeMillis()
                 return@withContext SyncResult.Success(fetchedCount = 0, actionableCount = 0)
             }

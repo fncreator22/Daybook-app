@@ -282,6 +282,14 @@ fun TodayScreen(
                 viewModel.convertGmailToMeeting(message)
                 viewingGmailMessage = null
             },
+            onAddLog = { message ->
+                viewModel.convertGmailToLog(message)
+                viewingGmailMessage = null
+            },
+            onAddWallet = { message ->
+                viewModel.convertGmailToWallet(message)
+                viewingGmailMessage = null
+            },
             onDismissMessage = { message ->
                 viewModel.dismissGmailMessage(message)
                 viewingGmailMessage = null
@@ -301,6 +309,14 @@ fun TodayScreen(
             },
             onAddMeeting = { message ->
                 viewModel.convertWhatsAppToMeeting(message)
+                viewingWhatsAppMessage = null
+            },
+            onAddLog = { message ->
+                viewModel.convertWhatsAppToLog(message)
+                viewingWhatsAppMessage = null
+            },
+            onAddWallet = { message ->
+                viewModel.convertWhatsAppToWallet(message)
                 viewingWhatsAppMessage = null
             },
             onDismissMessage = { message ->
@@ -712,7 +728,8 @@ private fun WhatsAppMessageCard(
     val parsed = remember(msg.message) { NaturalLanguageParser.parse(msg.message) }
     val isActionable = parsed.intent != ParsedIntent.UNKNOWN && parsed.intent != ParsedIntent.CONVERSATION
 
-    DaybookCard(
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
         onClick = if (onCardClick != null) { { onCardClick(msg) } } else null,
     ) {
         Column(

@@ -382,6 +382,25 @@ fun SyncSettingsSection(
                 }
             }
         }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = "DEMO & SAMPLE DATA",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+        )
+        DaybookCard {
+            SyncToggleRow(
+                title = "Enable Demo / Sample Data",
+                subtitle = "Inject mock emails & task suggestions for demonstration. Disabled by default.",
+                checked = state.demoDataEnabled,
+                enabled = true,
+                onCheckedChange = {
+                    syncViewModel.setDemoDataEnabled(!state.demoDataEnabled)
+                },
+            )
+        }
     }
 
     // ── Restore picker dialog ─────────────────────────────────────────────────

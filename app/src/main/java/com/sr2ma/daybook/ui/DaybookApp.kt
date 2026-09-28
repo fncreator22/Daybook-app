@@ -313,18 +313,20 @@ fun DaybookApp(viewModel: DaybookViewModel, syncViewModel: SyncViewModel) {
 
         Scaffold(
             topBar = {
-                DaybookTopAppBar(
-                    currentTab = state.tab,
-                    userName = syncState.userName,
-                    onAvatarClick = {
-                        if (state.tab == DaybookTab.SETTINGS) {
-                            viewModel.selectTab(DaybookTab.TODAY)
-                        } else {
-                            viewModel.selectTab(DaybookTab.SETTINGS)
-                        }
-                    },
-                    onBackClick = { viewModel.selectTab(DaybookTab.TODAY) },
-                )
+                if (state.tab == DaybookTab.WALLET || state.tab == DaybookTab.SETTINGS) {
+                    DaybookTopAppBar(
+                        currentTab = state.tab,
+                        userName = syncState.userName,
+                        onAvatarClick = {
+                            if (state.tab == DaybookTab.SETTINGS) {
+                                viewModel.selectTab(DaybookTab.TODAY)
+                            } else {
+                                viewModel.selectTab(DaybookTab.SETTINGS)
+                            }
+                        },
+                        onBackClick = { viewModel.selectTab(DaybookTab.TODAY) },
+                    )
+                }
             },
             bottomBar = { DaybookNavigationBar(selected = state.tab, onSelect = viewModel::selectTab) },
             floatingActionButton = {

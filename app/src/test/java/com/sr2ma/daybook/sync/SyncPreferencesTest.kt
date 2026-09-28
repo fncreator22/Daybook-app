@@ -115,6 +115,17 @@ class SyncPreferencesTest {
 
         assertTrue(syncPrefs.lastNetworkAccessAt in before..after)
     }
+
+    @Test
+    fun `demoDataEnabled defaults to false and persists updates`() {
+        assertFalse(syncPrefs.demoDataEnabled)
+
+        syncPrefs.demoDataEnabled = true
+        assertTrue(syncPrefs.demoDataEnabled)
+
+        syncPrefs.demoDataEnabled = false
+        assertFalse(syncPrefs.demoDataEnabled)
+    }
 }
 
 /**
