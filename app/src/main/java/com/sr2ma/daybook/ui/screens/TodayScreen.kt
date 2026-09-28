@@ -91,8 +91,23 @@ import android.net.Uri
 import androidx.compose.foundation.clickable
 import com.sr2ma.daybook.domain.NaturalLanguageParser
 import com.sr2ma.daybook.domain.ParsedIntent
+import com.sr2ma.daybook.domain.TodayBoard
 import com.sr2ma.daybook.sync.GmailSyncEngine
 import androidx.compose.material3.OutlinedButton
+import com.sr2ma.daybook.ui.components.TimelineItemRow
+import com.sr2ma.daybook.ui.components.PlatformBadge
+import com.sr2ma.daybook.ui.components.DurationBadge
+import com.sr2ma.daybook.ui.components.ActiveStatusDot
+import com.sr2ma.daybook.ui.theme.DarkPillBg
+import com.sr2ma.daybook.ui.theme.HeroNavyBg
+import com.sr2ma.daybook.ui.theme.CadenceNavyBg
+import com.sr2ma.daybook.ui.theme.EmeraldTeal
+import com.sr2ma.daybook.ui.theme.ElectricBlue
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.sp
 
 /**
  * The landing screen: one scrollable day, bucketed by what it is asking of you.
@@ -119,6 +134,8 @@ fun TodayScreen(
     var viewingWhatsAppMessage by remember { mutableStateOf<WhatsAppMessage?>(null) }
     var showConnectivityDialog by remember { mutableStateOf(false) }
     var showBriefingSheet by remember { mutableStateOf(false) }
+    var showProfileSheet by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var dismissedSuggestionKeys by rememberSaveable { mutableStateOf(listOf<String>()) }
     var completedExpanded by rememberSaveable { mutableStateOf(false) }
 
@@ -170,6 +187,19 @@ fun TodayScreen(
             today = state.today,
             userName = userName,
             onDismiss = { showBriefingSheet = false },
+        )
+    }
+
+    if (showProfileSheet) {
+        val syncPrefs = viewModel.syncPreferences ?: com.sr2ma.daybook.sync.SyncPreferences(LocalContext.current)
+        ProfileSheet(
+            syncPrefs = syncPrefs,
+            taskCount = state.tasks.size,
+            meetingCount = state.meetings.size,
+            logCount = state.logDays.sumOf { it.entries.size },
+            passCount = state.passes.size,
+            onProfileUpdated = {},
+            onDismiss = { showProfileSheet = false },
         )
     }
 
@@ -232,6 +262,9 @@ fun TodayScreen(
                 viewingTask = null
                 viewModel.deleteTask(taskToDelete)
             },
+            onUpdateTask = { taskToUpdate ->
+                viewModel.saveTask(taskToUpdate)
+            },
             onDismiss = { viewingTask = null },
         )
     }
@@ -285,153 +318,31 @@ fun TodayScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.fillMaxSize(),
     ) {
-        item(key = "day-header") {
-            DayHeader(
+        item(key = "today-top-bar-section") {
+            TodayTopBarSection(
                 today = state.today,
-                completedToday = board.completedToday,
                 userName = userName,
+                isOnline = isOnline,
+                connectionType = connectionType,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
+                activePassCount = state.passes.count { !it.isArchived },
+                onProfileClick = { showProfileSheet = true },
+                onConnectivityClick = { showConnectivityDialog = true },
+                onWalletClick = viewModel::openWalletTab,
             )
         }
-        item(key = "status-indicator") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    onClick = { showConnectivityDialog = true },
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(
-                                    color = if (isOnline) Color(0xFF34A853) else Color(0xFF9AA0A6),
-                                    shape = CircleShape,
-                                )
-                        )
-                        Text(
-                            text = if (isOnline) "Online ($connectionType)" else "100% On-Device Offline",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                // Prominent Glass Pill button for Wallet
-                Surface(
-                    onClick = { viewModel.openWalletTab() },
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_wallet),
-                            contentDescription = "Wallet",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        val activePassCount = state.passes.count { !it.isArchived }
-                        Text(
-                            text = "Wallet ($activePassCount)",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
+        item(key = "morning-briefing-hero-card") {
+            BriefingHeroCard(
+                board = board,
+                today = state.today,
+                userName = userName,
+                isOnline = isOnline,
+                onListenClick = { showBriefingSheet = true },
+            )
         }
-        item(key = "morning-briefing-card") {
-            val briefingSummary = remember(board) { BriefingWriter.generate(board) }
-            GlassCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showBriefingSheet = true }
-                    .padding(vertical = 2.dp),
-                animatedSheen = false,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_today),
-                                contentDescription = "Morning Briefing",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                text = "Morning Briefing",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                text = "• Tap to listen",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Text(
-                            text = briefingSummary,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
-                    IconButton(
-                        onClick = { showBriefingSheet = true },
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_mic),
-                            contentDescription = "Listen to briefing",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
-            }
+        item(key = "focus-cadence-tile") {
+            FocusCadenceCard(board = board)
         }
         item(key = "dashboard-metrics") {
             Row(
@@ -619,11 +530,33 @@ fun TodayScreen(
                 )
             }
         } else {
-            // Late work first, then today's, then anything already started: the order
-            // a person would work down the list in.
+            val filteredOverdue = if (searchQuery.isBlank()) board.overdue
+                else board.overdue.filter { it.title.contains(searchQuery, true) || it.notes.contains(searchQuery, true) }
+            val filteredDueToday = if (searchQuery.isBlank()) board.dueToday
+                else board.dueToday.filter { it.title.contains(searchQuery, true) || it.notes.contains(searchQuery, true) }
+            val filteredInProgress = if (searchQuery.isBlank()) board.inProgress
+                else board.inProgress.filter { it.title.contains(searchQuery, true) || it.notes.contains(searchQuery, true) }
+            val filteredUpcoming = if (searchQuery.isBlank()) board.upcoming
+                else board.upcoming.filter { it.title.contains(searchQuery, true) || it.notes.contains(searchQuery, true) }
+            val filteredFollowUps = if (searchQuery.isBlank()) board.followUps
+                else board.followUps.filter { it.title.contains(searchQuery, true) || it.location.contains(searchQuery, true) }
+            val filteredLog = if (searchQuery.isBlank()) board.log
+                else board.log.filter { it.body.contains(searchQuery, true) }
+
+            // Upcoming Agenda Timeline Rail
+            agendaTimelineSection(
+                meetings = board.meetings,
+                tasks = board.dueToday,
+                today = state.today,
+                searchQuery = searchQuery,
+                onMeetingClick = { viewingMeeting = it },
+                onTaskClick = { viewingTask = it },
+            )
+
+            // Late work first, then today's, then anything already started
             boardSection(
                 titleRes = R.string.today_section_overdue,
-                rows = board.overdue,
+                rows = filteredOverdue,
                 keyPrefix = "overdue",
                 idOf = { it.id },
             ) { task ->
@@ -636,7 +569,7 @@ fun TodayScreen(
             }
             boardSection(
                 titleRes = R.string.today_section_due_today,
-                rows = board.dueToday,
+                rows = filteredDueToday,
                 keyPrefix = "due",
                 idOf = { it.id },
             ) { task ->
@@ -649,7 +582,7 @@ fun TodayScreen(
             }
             boardSection(
                 titleRes = R.string.today_section_in_progress,
-                rows = board.inProgress,
+                rows = filteredInProgress,
                 keyPrefix = "in-progress",
                 idOf = { it.id },
             ) { task ->
@@ -662,7 +595,7 @@ fun TodayScreen(
             }
             boardSection(
                 titleRes = R.string.today_section_upcoming,
-                rows = board.upcoming,
+                rows = filteredUpcoming,
                 keyPrefix = "upcoming",
                 idOf = { it.id },
             ) { task ->
@@ -674,24 +607,8 @@ fun TodayScreen(
                 )
             }
             boardSection(
-                titleRes = R.string.today_section_meetings,
-                rows = board.meetings,
-                keyPrefix = "meeting",
-                idOf = { it.id },
-            ) { meeting ->
-                MeetingRow(
-                    meeting = meeting,
-                    today = state.today,
-                    onClick = { viewingMeeting = meeting },
-                    onToggleFollowUp = { viewModel.toggleFollowUpDone(meeting) },
-                    // Every meeting in this section is today's by definition, so a
-                    // "Today" chip on each row would say nothing.
-                    showDay = false,
-                )
-            }
-            boardSection(
                 titleRes = R.string.today_section_follow_ups,
-                rows = board.followUps,
+                rows = filteredFollowUps,
                 keyPrefix = "follow-up",
                 idOf = { it.id },
             ) { meeting ->
@@ -703,7 +620,9 @@ fun TodayScreen(
                 )
             }
         }
-        logSection(entries = board.log, today = state.today, viewModel = viewModel)
+        val filteredLog = if (searchQuery.isBlank()) board.log
+            else board.log.filter { it.body.contains(searchQuery, true) }
+        logSection(entries = filteredLog, today = state.today, viewModel = viewModel)
         whatsAppSection(
             messages = state.recentWhatsAppMessages,
             onConvert = viewModel::convertWhatsAppAction,
@@ -887,48 +806,589 @@ private fun <T> LazyListScope.boardSection(
     items(items = rows, key = { "$keyPrefix-${idOf(it)}" }) { row(it) }
 }
 
-/** The date, written out, with a quiet tally of what has already been finished. */
 @Composable
-private fun DayHeader(
+private fun TodayTopBarSection(
     today: LocalDate,
-    completedToday: Int,
-    userName: String? = null,
+    userName: String?,
+    isOnline: Boolean,
+    connectionType: String,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    activePassCount: Int,
+    onProfileClick: () -> Unit,
+    onConnectivityClick: () -> Unit,
+    onWalletClick: () -> Unit,
 ) {
-    GlassCard(
-        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-        animatedSheen = true,
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            val greeting = if (userName != null) {
-                val hour = java.time.LocalTime.now().hour
-                val prefix = when (hour) {
-                    in 5..11 -> "Good morning"
-                    in 12..16 -> "Good afternoon"
-                    else -> "Good evening"
-                }
-                "$prefix, $userName"
-            } else {
-                Dates.weekdayLong(today)
-            }
-            Text(
-                text = greeting,
-                style = MaterialTheme.typography.headlineSmall,
-            )
+        // Brand Row: App Icon + Name on left, Profile avatar on right
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = EmeraldTeal.copy(alpha = 0.15f),
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_today),
+                            contentDescription = "Daybook",
+                            tint = EmeraldTeal,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                Text(
+                    text = "Daybook",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+
+            Surface(
+                onClick = onProfileClick,
+                shape = CircleShape,
+                color = DarkPillBg,
+                border = BorderStroke(1.5.dp, EmeraldTeal.copy(alpha = 0.6f)),
+                modifier = Modifier.size(36.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    val initial = userName?.trim()?.firstOrNull()?.uppercase()
+                    if (initial != null) {
+                        Text(
+                            text = initial,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                            ),
+                            color = Color.White,
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_person),
+                            contentDescription = "User Profile",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        // Date and Inline Search Pill Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "${Dates.weekdayLong(today)}, ${Dates.shortLabel(today, today)}",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = DarkPillBg,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search),
+                        contentDescription = "Search",
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = Color.White,
+                            fontSize = 13.sp,
+                        ),
+                        cursorBrush = SolidColor(EmeraldTeal),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = "Search...",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        color = Color.White.copy(alpha = 0.45f),
+                                        fontSize = 13.sp,
+                                    ),
+                                )
+                            }
+                            innerTextField()
+                        }
+                    )
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { onSearchQueryChange("") },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = "Clear",
+                                tint = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Connectivity Status & Wallet Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                onClick = onConnectivityClick,
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (isOnline) Color(0xFF34A853) else Color(0xFF9AA0A6),
+                                shape = CircleShape,
+                            )
+                    )
+                    Text(
+                        text = if (isOnline) "Online ($connectionType)" else "100% On-Device Offline",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Surface(
+                onClick = onWalletClick,
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_wallet),
+                        contentDescription = "Wallet",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = "Wallet ($activePassCount)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BriefingHeroCard(
+    board: TodayBoard,
+    today: LocalDate,
+    userName: String?,
+    isOnline: Boolean,
+    onListenClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val quote = remember(board) { BriefingWriter.generate(board) }
+    val hour = remember { java.time.LocalTime.now().hour }
+    val greetingPrefix = when (hour) {
+        in 5..11 -> "Good Morning"
+        in 12..16 -> "Good Afternoon"
+        else -> "Good Evening"
+    }
+    val greeting = if (!userName.isNullOrBlank()) "$greetingPrefix, $userName!" else "$greetingPrefix!"
+
+    GlassCard(
+        tint = HeroNavyBg,
+        borderWidth = 1.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        onClick = onListenClick,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (userName != null) "${Dates.weekdayLong(today)} \u2014 ${Dates.shortLabel(today, today)}" else Dates.shortLabel(today, today),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "MORNING BRIEFING",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                    ),
+                    color = EmeraldTeal,
                 )
-                if (completedToday > 0) {
-                    AccentChip(
-                        text = stringResource(R.string.today_completed_count, completedToday),
-                        accent = DaybookAccents.done,
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF1E2A38),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        ActiveStatusDot(isActive = true, dotColor = EmeraldTeal, size = 6.dp)
+                        Text(
+                            text = if (isOnline) "Live Sync" else "100% Offline",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = Color(0xFFE2E8F0),
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = greeting,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp,
+                ),
+                color = Color.White,
+            )
+
+            Text(
+                text = "\"$quote\"",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                ),
+                color = Color(0xFFCBD5E1),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Surface(
+                onClick = onListenClick,
+                shape = RoundedCornerShape(12.dp),
+                color = EmeraldTeal.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, EmeraldTeal.copy(alpha = 0.4f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_mic),
+                        contentDescription = "Listen to briefing",
+                        tint = EmeraldTeal,
+                        modifier = Modifier.size(16.dp),
                     )
+                    Text(
+                        text = "Listen with TTS",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                        ),
+                        color = EmeraldTeal,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusCadenceCard(
+    board: TodayBoard,
+    modifier: Modifier = Modifier,
+) {
+    val activeTaskTitle = board.inProgress.firstOrNull()?.title
+        ?: board.dueToday.firstOrNull()?.title
+        ?: "Work"
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = CadenceNavyBg.copy(alpha = 0.75f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = ElectricBlue.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.35f)),
+                modifier = Modifier.size(36.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_clock),
+                        contentDescription = "Focus Clock",
+                        tint = ElectricBlue,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Focus Session",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                    ),
+                    color = Color.White,
+                )
+                Text(
+                    text = activeTaskTitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF94A3B8),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            DurationBadge(durationText = "1h 30m")
+        }
+    }
+}
+
+private data class AgendaTimelineEntry(
+    val id: String,
+    val timeLabel: String,
+    val title: String,
+    val platformOrBadge: String,
+    val durationText: String,
+    val isMeeting: Boolean,
+    val meeting: Meeting? = null,
+    val task: Task? = null,
+    val sortMinutes: Int = Int.MAX_VALUE,
+)
+
+private fun LazyListScope.agendaTimelineSection(
+    meetings: List<Meeting>,
+    tasks: List<Task>,
+    today: LocalDate,
+    searchQuery: String,
+    onMeetingClick: (Meeting) -> Unit,
+    onTaskClick: (Task) -> Unit,
+) {
+    val items = mutableListOf<AgendaTimelineEntry>()
+
+    meetings.forEach { m ->
+        val time = m.startTime
+        val timeStr = time?.let { Dates.timeLabel(it) } ?: "All Day"
+        val sortMinutes = if (time != null) time.hour * 60 + time.minute else 9 * 60
+        val platform = when {
+            m.location.contains("zoom", ignoreCase = true) -> "Zoom"
+            m.location.contains("studio", ignoreCase = true) -> "Studio"
+            m.location.contains("meet", ignoreCase = true) || m.location.contains("video", ignoreCase = true) -> "Video"
+            m.location.isNotBlank() -> m.location
+            else -> "Meeting"
+        }
+        val duration = when {
+            m.notes.contains("45m", ignoreCase = true) || m.notes.contains("45 min", ignoreCase = true) -> "45m"
+            m.notes.contains("1h", ignoreCase = true) || m.notes.contains("60m", ignoreCase = true) -> "1h"
+            m.notes.contains("15m", ignoreCase = true) -> "15m"
+            m.notes.contains("30m", ignoreCase = true) || m.notes.contains("30 min", ignoreCase = true) -> "30m"
+            else -> "45m"
+        }
+        items.add(
+            AgendaTimelineEntry(
+                id = "m-${m.id}",
+                timeLabel = timeStr,
+                title = m.title,
+                platformOrBadge = platform,
+                durationText = duration,
+                isMeeting = true,
+                meeting = m,
+                sortMinutes = sortMinutes,
+            )
+        )
+    }
+
+    tasks.forEach { t ->
+        val extractedTime = NaturalLanguageParser.extractTime(t.title.lowercase())
+        val notesTimeStr = t.notes.lines().find { it.startsWith("Time:", ignoreCase = true) }?.removePrefix("Time:")?.removePrefix("time:")?.trim()
+        val timeStr = extractedTime?.let { Dates.timeLabel(it) } ?: notesTimeStr
+        if (timeStr != null) {
+            val sortMinutes = if (extractedTime != null) {
+                extractedTime.hour * 60 + extractedTime.minute
+            } else {
+                val parsedFromNotes = NaturalLanguageParser.extractTime(timeStr.lowercase())
+                if (parsedFromNotes != null) parsedFromNotes.hour * 60 + parsedFromNotes.minute else 10 * 60
+            }
+            val platform = t.project?.takeIf { it.isNotBlank() } ?: "Task"
+            items.add(
+                AgendaTimelineEntry(
+                    id = "t-${t.id}",
+                    timeLabel = timeStr,
+                    title = t.title,
+                    platformOrBadge = platform,
+                    durationText = "30m",
+                    isMeeting = false,
+                    task = t,
+                    sortMinutes = sortMinutes,
+                )
+            )
+        }
+    }
+
+    val sortedItems = items.sortedBy { it.sortMinutes }
+    val filteredItems = if (searchQuery.isNotBlank()) {
+        sortedItems.filter { it.title.contains(searchQuery, ignoreCase = true) || it.platformOrBadge.contains(searchQuery, ignoreCase = true) }
+    } else {
+        sortedItems
+    }
+
+    if (filteredItems.isNotEmpty()) {
+        item(key = "agenda-timeline-header") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Upcoming Agenda",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_calendar),
+                            contentDescription = "Calendar view",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(
+                            text = "${filteredItems.size}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+
+        itemsIndexed(filteredItems, key = { _, item -> item.id }) { index, entry ->
+            val isFirst = index == 0
+            val isLast = index == filteredItems.lastIndex
+            TimelineItemRow(
+                timeLabel = entry.timeLabel,
+                isFirst = isFirst,
+                isLast = isLast,
+                isActive = (index == 0),
+            ) {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    onClick = {
+                        if (entry.isMeeting && entry.meeting != null) {
+                            onMeetingClick(entry.meeting)
+                        } else if (entry.task != null) {
+                            onTaskClick(entry.task)
+                        }
+                    },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = entry.title,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                ),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                PlatformBadge(platform = entry.platformOrBadge)
+                                DurationBadge(durationText = entry.durationText)
+                            }
+                        }
+
+                        ActiveStatusDot(isActive = true, dotColor = EmeraldTeal, size = 9.dp)
+                    }
                 }
             }
         }

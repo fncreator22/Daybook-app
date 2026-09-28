@@ -10,7 +10,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.sr2ma.daybook.domain.Dates
+import com.sr2ma.daybook.domain.model.Priority
+import com.sr2ma.daybook.domain.model.TaskStatus
+import com.sr2ma.daybook.ui.components.TimelineItemRow
+import com.sr2ma.daybook.ui.theme.CoralRed
+import com.sr2ma.daybook.ui.theme.ElectricBlue
+import com.sr2ma.daybook.ui.theme.EmeraldTeal
+import com.sr2ma.daybook.ui.theme.TimelineRailLine
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -77,6 +86,9 @@ fun TasksScreen(
             },
             onToggleDone = { taskToToggle ->
                 viewModel.toggleTaskDone(taskToToggle)
+            },
+            onUpdateTask = { taskToUpdate ->
+                viewModel.saveTask(taskToUpdate)
             },
             onDismiss = { viewingTask = null },
         )
@@ -149,16 +161,33 @@ fun TasksScreen(
                     )
                 }
 
-                else -> items(
+                else -> itemsIndexed(
                     items = state.visibleTasks,
-                    key = { it.id },
-                ) { task ->
-                    TaskRow(
-                        task = task,
-                        today = state.today,
-                        onToggleDone = { viewModel.toggleTaskDone(task) },
-                        onClick = { viewingTask = task },
-                    )
+                    key = { _, task -> task.id },
+                ) { index, task ->
+                    val isFirst = index == 0
+                    val isLast = index == state.visibleTasks.lastIndex
+                    val timeLabel = task.dueDate?.let { Dates.shortLabel(it, state.today) } ?: "Task"
+                    val nodeColor = when {
+                        task.status == TaskStatus.DONE -> EmeraldTeal
+                        task.priority == Priority.HIGH || task.priority == Priority.URGENT -> CoralRed
+                        task.status == TaskStatus.IN_PROGRESS -> ElectricBlue
+                        else -> TimelineRailLine
+                    }
+                    TimelineItemRow(
+                        timeLabel = timeLabel,
+                        isFirst = isFirst,
+                        isLast = isLast,
+                        isActive = (task.status == TaskStatus.IN_PROGRESS || (index == 0 && task.isOpen)),
+                        nodeColor = nodeColor,
+                    ) {
+                        TaskRow(
+                            task = task,
+                            today = state.today,
+                            onToggleDone = { viewModel.toggleTaskDone(task) },
+                            onClick = { viewingTask = task },
+                        )
+                    }
                 }
             }
         }
@@ -181,14 +210,31 @@ private fun LazyListScope.projectGroup(
             count = tasks.size,
         )
     }
-    items(items = tasks, key = { "$heading-${it.id}" }) { task ->
-        TaskRow(
-            task = task,
-            today = state.today,
-            onToggleDone = { viewModel.toggleTaskDone(task) },
-            onClick = { onTaskClick(task) },
-            showProject = false,
-        )
+    itemsIndexed(items = tasks, key = { _, task -> "$heading-${task.id}" }) { index, task ->
+        val isFirst = index == 0
+        val isLast = index == tasks.lastIndex
+        val timeLabel = task.dueDate?.let { Dates.shortLabel(it, state.today) } ?: "Task"
+        val nodeColor = when {
+            task.status == TaskStatus.DONE -> EmeraldTeal
+            task.priority == Priority.HIGH || task.priority == Priority.URGENT -> CoralRed
+            task.status == TaskStatus.IN_PROGRESS -> ElectricBlue
+            else -> TimelineRailLine
+        }
+        TimelineItemRow(
+            timeLabel = timeLabel,
+            isFirst = isFirst,
+            isLast = isLast,
+            isActive = (task.status == TaskStatus.IN_PROGRESS || (index == 0 && task.isOpen)),
+            nodeColor = nodeColor,
+        ) {
+            TaskRow(
+                task = task,
+                today = state.today,
+                onToggleDone = { viewModel.toggleTaskDone(task) },
+                onClick = { onTaskClick(task) },
+                showProject = false,
+            )
+        }
     }
 }
 

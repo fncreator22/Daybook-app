@@ -6,7 +6,7 @@
 [![Min SDK](https://img.shields.io/badge/Min%20SDK-26-orange.svg)](https://developer.android.com/about/dashboards)
 [![Target SDK](https://img.shields.io/badge/Target%20SDK-36-green.svg)](https://developer.android.com/about/versions/16)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-182%20Passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-197%20Passed-brightgreen.svg)]()
 
 > **100% Offline-First Personal Productivity & On-Device Intelligence for Android.**  
 > A private, zero-cloud personal workspace built with **Jetpack Compose**, **Material 3**, **SQLCipher**, and on-device machine intelligence.
@@ -212,8 +212,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Daybook maintains a strict test-driven development (TDD) discipline. Every domain rule, parser case, alarm receiver, database codec, and sync engine feature is covered by unit tests:
 
-- **182 Unit Tests across 19 Test Suites (100% Pass Rate)**
+- **197 Unit Tests across 20 Test Suites (100% Pass Rate)**
 - Test Suites include:
+  - `ChecklistParserTest`: Markdown subtask syntax parsing (`- [ ]`, `* [ ]`, `+ [ ]`), live progress calculation, state toggling, attachment extraction, and case-insensitive topic tags.
   - `NaturalLanguageParserTest`: Compound clause splitting, relative date resolution, time parsing, schedule query detection, and conversational intent detection.
   - `GmailSyncEngineTest`: Topic extraction, composite tag preservation, location normalization, date parsing, and task note construction.
   - `TodayBuilderTest`: Bucket aggregation, timezone boundary handling, and active vs. archived pass segregation.

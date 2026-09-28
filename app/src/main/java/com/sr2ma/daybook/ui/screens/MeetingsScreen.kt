@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
+import com.sr2ma.daybook.domain.Dates
 import com.sr2ma.daybook.domain.MeetingFilter
 import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.ui.DaybookUiState
@@ -30,6 +32,7 @@ import com.sr2ma.daybook.ui.components.EmptyState
 import com.sr2ma.daybook.ui.components.FilterChipRow
 import com.sr2ma.daybook.ui.components.MeetingRow
 import com.sr2ma.daybook.ui.components.SearchField
+import com.sr2ma.daybook.ui.components.TimelineItemRow
 import com.sr2ma.daybook.ui.labelRes
 import com.sr2ma.daybook.sync.PendingSyncBanner
 
@@ -115,13 +118,24 @@ fun MeetingsScreen(
                     )
                 }
             } else {
-                items(items = state.visibleMeetings, key = { it.id }) { meeting ->
-                    MeetingRow(
-                        meeting = meeting,
-                        today = state.today,
-                        onClick = { viewingMeeting = meeting },
-                        onToggleFollowUp = { viewModel.toggleFollowUpDone(meeting) },
-                    )
+                itemsIndexed(items = state.visibleMeetings, key = { _, meeting -> meeting.id }) { index, meeting ->
+                    val isFirst = index == 0
+                    val isLast = index == state.visibleMeetings.lastIndex
+                    val timeLabel = meeting.startTime?.let { Dates.timeLabel(it) }
+                        ?: Dates.shortLabel(meeting.day, state.today)
+                    TimelineItemRow(
+                        timeLabel = timeLabel,
+                        isFirst = isFirst,
+                        isLast = isLast,
+                        isActive = (index == 0),
+                    ) {
+                        MeetingRow(
+                            meeting = meeting,
+                            today = state.today,
+                            onClick = { viewingMeeting = meeting },
+                            onToggleFollowUp = { viewModel.toggleFollowUpDone(meeting) },
+                        )
+                    }
                 }
             }
         }

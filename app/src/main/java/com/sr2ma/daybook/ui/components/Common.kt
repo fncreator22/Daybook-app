@@ -78,16 +78,13 @@ fun DaybookCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val colors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-    )
-    val cardModifier = modifier.fillMaxWidth()
-    // A null onClick is what makes a row inert: there is no click target at all,
-    // rather than a target that swallows the press and does nothing.
-    if (onClick != null) {
-        OutlinedCard(onClick = onClick, colors = colors, modifier = cardModifier) { content() }
-    } else {
-        OutlinedCard(colors = colors, modifier = cardModifier) { content() }
+    GlassCard(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        elevation = 0.dp,
+    ) {
+        content()
     }
 }
 

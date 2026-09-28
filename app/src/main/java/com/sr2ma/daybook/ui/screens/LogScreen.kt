@@ -8,10 +8,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import com.sr2ma.daybook.ui.components.TimelineItemRow
+import com.sr2ma.daybook.ui.theme.EmeraldTeal
+import com.sr2ma.daybook.ui.theme.CoralRed
+import com.sr2ma.daybook.ui.theme.ElectricBlue
+import com.sr2ma.daybook.ui.theme.AmethystPurple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -99,8 +105,24 @@ fun LogScreen(
                             count = logDay.entries.size,
                         )
                     }
-                    items(items = logDay.entries, key = { it.id }) { entry ->
-                        LogEntryRow(entry = entry, onClick = { viewModel.editLogEntry(entry) })
+                    itemsIndexed(items = logDay.entries, key = { _, entry -> entry.id }) { index, entry ->
+                        val isFirst = index == 0
+                        val isLast = index == logDay.entries.lastIndex
+                        val dotColor = when (entry.kind) {
+                            LogKind.WIN -> EmeraldTeal
+                            LogKind.BLOCKER -> CoralRed
+                            LogKind.DECISION -> ElectricBlue
+                            LogKind.NOTE -> AmethystPurple
+                        }
+                        TimelineItemRow(
+                            timeLabel = logKindLabel(entry.kind),
+                            isFirst = isFirst,
+                            isLast = isLast,
+                            isActive = (entry.kind == LogKind.WIN),
+                            nodeColor = dotColor,
+                        ) {
+                            LogEntryRow(entry = entry, onClick = { viewModel.editLogEntry(entry) })
+                        }
                     }
                 }
             }
