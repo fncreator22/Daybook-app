@@ -71,6 +71,8 @@ fun GmailCardSheet(
     today: LocalDate,
     onAddTask: (GmailMessage) -> Unit,
     onAddMeeting: (GmailMessage) -> Unit,
+    onAddLog: (GmailMessage) -> Unit,
+    onAddWallet: (GmailMessage) -> Unit,
     onDismissMessage: (GmailMessage) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -158,6 +160,22 @@ fun GmailCardSheet(
                                     showMenu = false
                                     onDismiss()
                                     onAddMeeting(message)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("+ Add as Log Entry") },
+                                onClick = {
+                                    showMenu = false
+                                    onDismiss()
+                                    onAddLog(message)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("+ Add to Wallet / Pass") },
+                                onClick = {
+                                    showMenu = false
+                                    onDismiss()
+                                    onAddWallet(message)
                                 }
                             )
                             DropdownMenuItem(
@@ -407,7 +425,7 @@ fun GmailCardSheet(
                         },
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text("+ Add Task")
+                        Text("+ Task")
                     }
 
                     Button(
@@ -417,7 +435,32 @@ fun GmailCardSheet(
                         },
                         modifier = Modifier.weight(1f),
                     ) {
-                        Text("+ Add Meeting")
+                        Text("+ Meeting")
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            onAddLog(message)
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("+ Log")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            onAddWallet(message)
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("+ Wallet / Pass")
                     }
                 }
                 Spacer(Modifier.height(8.dp))

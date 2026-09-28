@@ -213,6 +213,10 @@ class SyncPreferences(
         get() = prefs.getBoolean(KEY_SAMPLE_GMAIL_CLEARED, false)
         set(value) = prefs.edit().putBoolean(KEY_SAMPLE_GMAIL_CLEARED, value).apply()
 
+    var demoDataEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DEMO_DATA_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_DEMO_DATA_ENABLED, value).apply()
+
     var lastGmailSyncDiffSummary: String?
         get() = prefs.getString("key_last_gmail_diff_summary", null)
         set(value) = prefs.edit().putString("key_last_gmail_diff_summary", value).apply()
@@ -277,6 +281,7 @@ class SyncPreferences(
         private const val KEY_GMAIL_FILTER_MARKETING = "gmail_filter_marketing"
         private const val KEY_LAST_GMAIL_SYNC = "last_gmail_sync"
         private const val KEY_SAMPLE_GMAIL_CLEARED = "sample_gmail_cleared"
+        private const val KEY_DEMO_DATA_ENABLED = "demo_data_enabled"
     }
 }
 

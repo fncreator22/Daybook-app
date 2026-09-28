@@ -7,6 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 
 class GmailSyncEngineTest {
@@ -142,5 +143,35 @@ class GmailSyncEngineTest {
         assertTrue(notes.contains("Location: Zoom"))
         assertTrue(notes.contains("Time: 15:00"))
         assertTrue(notes.contains("Please prepare the slide deck."))
+    }
+
+    @Test
+    fun `offline sync returns 0 when demoDataEnabled is false`() = runBlocking {
+        syncPrefs.accessToken = "offline_local_test"
+        syncPrefs.profilePrimaryEmail = "test@example.com"
+        syncPrefs.demoDataEnabled = false
+
+        val dummyEngine = GmailSyncEngine(syncPrefs = syncPrefs)
+        val result = dummyEngine.sync()
+
+        assertTrue(result is GmailSyncEngine.SyncResult.Success)
+        val success = result as GmailSyncEngine.SyncResult.Success
+        assertEquals(0, success.fetchedCount)
+        assertEquals(0, success.actionableCount)
+    }
+
+    @Test
+    fun `offline sync generates samples only when demoDataEnabled is true`() = runBlocking {
+        syncPrefs.accessToken = "offline_local_test"
+        syncPrefs.profilePrimaryEmail = "test@example.com"
+        syncPrefs.demoDataEnabled = true
+
+        val dummyEngine = GmailSyncEngine(syncPrefs = syncPrefs)
+        val result = dummyEngine.sync()
+
+        assertTrue(result is GmailSyncEngine.SyncResult.Success)
+        val success = result as GmailSyncEngine.SyncResult.Success
+        assertEquals(3, success.fetchedCount)
+        assertTrue(success.actionableCount > 0)
     }
 }
