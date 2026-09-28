@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +34,7 @@ import com.sr2ma.daybook.ui.accent
 import com.sr2ma.daybook.ui.dayLabel
 import com.sr2ma.daybook.ui.labelRes
 import com.sr2ma.daybook.ui.latenessLabel
+import com.sr2ma.daybook.ui.theme.CoralRed
 import com.sr2ma.daybook.ui.theme.DaybookAccents
 import java.time.LocalDate
 
@@ -99,18 +101,32 @@ fun TaskRow(
                 },
             )
             Column(modifier = Modifier.weight(1f).padding(top = 10.dp)) {
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (task.status.isClosed) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    textDecoration = if (isDone) TextDecoration.LineThrough else null,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = task.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (task.status.isClosed) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        textDecoration = if (isDone) TextDecoration.LineThrough else null,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (task.priority == Priority.HIGH || task.priority == Priority.URGENT) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_flame),
+                            contentDescription = "High Priority",
+                            tint = CoralRed,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
                 if (task.notes.isNotBlank()) {
                     Text(
                         text = task.notes,
