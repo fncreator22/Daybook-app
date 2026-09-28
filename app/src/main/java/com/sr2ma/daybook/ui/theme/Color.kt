@@ -47,6 +47,16 @@ internal val Green90 = Color(0xFFCBEBCB)
 internal val Grey10 = Color(0xFF16201F)
 internal val Grey90 = Color(0xFFDDE4E2)
 
+// Showcase elevation palette tokens
+internal val EmeraldTeal = Color(0xFF2EC4B6)
+internal val CoralRed = Color(0xFFFF5A5F)
+internal val DarkPillBg = Color(0xFF1C2127)
+internal val HeroNavyBg = Color(0xFF161F2E)
+internal val CadenceNavyBg = Color(0xFF152238)
+internal val TimelineRailLine = Color(0xFF2A3644)
+internal val ElectricBlue = Color(0xFF3A86FF)
+internal val AmethystPurple = Color(0xFF9D4EDD)
+
 /**
  * A tint to sit content on, and the ink to write on that tint.
  *
@@ -77,4 +87,28 @@ object DaybookAccents {
     val overdue = Accent(Red90, Red10)
     val done = Accent(Green90, Green10)
     val neutral = Accent(Grey90, Grey10)
+
+    // Showcase tokens
+    val activeDot = Accent(EmeraldTeal, Color(0xFF00201D))
+    val flame = CoralRed
+    val electricBlue = ElectricBlue
+
+    // Topic accents
+    val topicStrategy = Accent(Color(0xFF0D332D), EmeraldTeal)
+    val topicMarketing = Accent(Color(0xFF3D2600), Color(0xFFFFB703))
+    val topicGoals = Accent(Color(0xFF0D253F), ElectricBlue)
+    val topicResearch = Accent(Color(0xFF2E114D), AmethystPurple)
+    val topicDefault = Accent(Color(0xFF1C2127), Grey90)
+
+    fun topicAccent(topic: String): Accent {
+        val lower = topic.lowercase().removePrefix("#")
+        return when {
+            lower.contains("strat") -> topicStrategy
+            lower.contains("market") -> topicMarketing
+            lower.contains("goal") -> topicGoals
+            lower.contains("research") -> topicResearch
+            else -> topicDefault
+        }
+    }
 }
+
