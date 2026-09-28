@@ -66,7 +66,7 @@ class DaybookViewModel(
     private val llmEngine: LlmEngine? = null,
     /** Used for fast model-present check on [openConversation]. */
     private val modelDownloader: ModelDownloader? = null,
-    private val syncPreferences: SyncPreferences? = null,
+    val syncPreferences: SyncPreferences? = null,
 ) : ViewModel() {
 
     private val whatsAppDao = WhatsAppDao(repository.database)
@@ -154,46 +154,80 @@ class DaybookViewModel(
     /**
      * Converts a suggested action from an email into a real Task or Meeting with 1 tap.
      */
-    fun convertGmailAction(msg: GmailMessage) {
-        val action = msg.suggestedAction ?: return
+    /** Converts an email suggestion into a Task, preserving rich metadata. */
+    fun convertGmailToTask(msg: GmailMessage) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 gmailDao.markActioned(msg.id)
-                if (action.startsWith("Task:", ignoreCase = true)) {
-                    val raw = action.removePrefix("Task:").trim()
-                    val parsed = NaturalLanguageParser.parse(raw, _state.value.today)
-                    val task = Task(
-                        title = parsed.taskTitle ?: raw,
-                        dueDate = parsed.dueDate ?: _state.value.today,
-                        priority = parsed.priority,
-                        status = TaskStatus.OPEN,
-                        project = parsed.project,
-                    )
-                    val savedId = repository.saveTask(task)
-                    if (task.dueDate != null) {
-                        com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
-                            context = repository.database.context,
-                            task = task.copy(id = savedId),
-                        )
-                    }
-                } else if (action.startsWith("Meeting:", ignoreCase = true)) {
-                    val raw = action.removePrefix("Meeting:").trim()
-                    val parsed = NaturalLanguageParser.parse(raw, _state.value.today)
-                    val meeting = Meeting(
-                        title = parsed.meetingTitle ?: raw,
-                        day = parsed.dueDate ?: _state.value.today,
-                        startTime = parsed.meetingTime,
-                        attendees = parsed.meetingAttendees.joinToString(", ").ifBlank { msg.sender },
-                    )
-                    val savedId = repository.saveMeeting(meeting)
-                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                val topics = com.sr2ma.daybook.sync.GmailSyncEngine.extractTopics(msg.subject, msg.snippet)
+                val location = com.sr2ma.daybook.sync.GmailSyncEngine.extractLocation(msg.subject, msg.snippet)
+                val (extractedDate, extractedTime) = com.sr2ma.daybook.sync.GmailSyncEngine.extractDateTime(msg.subject, msg.snippet, _state.value.today)
+                val timeStr = extractedTime?.let { "$it" }
+                val notes = com.sr2ma.daybook.sync.GmailSyncEngine.buildTaskNotes(msg, topics, location, timeStr)
+                val project = topics.firstOrNull()
+                val candidate = msg.suggestedAction?.removePrefix("Task:")?.removePrefix("Meeting:")?.trim()
+                    ?: msg.subject.ifBlank { msg.snippet.take(60) }
+                val parsed = NaturalLanguageParser.parse(candidate, _state.value.today)
+                val task = Task(
+                    title = parsed.taskTitle ?: candidate,
+                    notes = notes,
+                    project = parsed.project ?: project,
+                    dueDate = parsed.dueDate ?: extractedDate ?: _state.value.today,
+                    priority = parsed.priority,
+                    status = TaskStatus.OPEN,
+                )
+                val savedId = repository.saveTask(task)
+                if (task.dueDate != null) {
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
                         context = repository.database.context,
-                        meeting = meeting.copy(id = savedId),
+                        task = task.copy(id = savedId),
                     )
                 }
             }
             loadRecentGmailMessages()
             update { it.copy(message = nextMessage(R.string.gmail_action_converted)) }
+        }
+    }
+
+    /** Converts an email suggestion into a Meeting, preserving rich metadata. */
+    fun convertGmailToMeeting(msg: GmailMessage) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                gmailDao.markActioned(msg.id)
+                val topics = com.sr2ma.daybook.sync.GmailSyncEngine.extractTopics(msg.subject, msg.snippet)
+                val location = com.sr2ma.daybook.sync.GmailSyncEngine.extractLocation(msg.subject, msg.snippet)
+                val (extractedDate, extractedTime) = com.sr2ma.daybook.sync.GmailSyncEngine.extractDateTime(msg.subject, msg.snippet, _state.value.today)
+                val timeStr = extractedTime?.let { "$it" }
+                val notes = com.sr2ma.daybook.sync.GmailSyncEngine.buildTaskNotes(msg, topics, location, timeStr)
+                val candidate = msg.suggestedAction?.removePrefix("Meeting:")?.removePrefix("Task:")?.trim()
+                    ?: msg.subject.ifBlank { msg.snippet.take(60) }
+                val parsed = NaturalLanguageParser.parse(candidate, _state.value.today)
+                val meeting = Meeting(
+                    title = parsed.meetingTitle ?: candidate,
+                    day = parsed.dueDate ?: extractedDate ?: _state.value.today,
+                    startTime = parsed.meetingTime ?: extractedTime,
+                    location = location ?: "",
+                    attendees = parsed.meetingAttendees.joinToString(", ").ifBlank { msg.sender },
+                    notes = notes,
+                )
+                val savedId = repository.saveMeeting(meeting)
+                com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                    context = repository.database.context,
+                    meeting = meeting.copy(id = savedId),
+                )
+            }
+            loadRecentGmailMessages()
+            update { it.copy(message = nextMessage(R.string.gmail_action_converted)) }
+        }
+    }
+
+    /** Converts a suggested action from an email into a real Task or Meeting. */
+    fun convertGmailAction(msg: GmailMessage) {
+        val action = msg.suggestedAction
+        if (action != null && action.startsWith("Meeting:", ignoreCase = true)) {
+            convertGmailToMeeting(msg)
+        } else {
+            convertGmailToTask(msg)
         }
     }
 
@@ -204,6 +238,16 @@ class DaybookViewModel(
                 gmailDao.delete(msg.id)
             }
             loadRecentGmailMessages()
+        }
+    }
+
+    /** Dismiss a WhatsApp message card from the Today board. */
+    fun dismissWhatsAppMessage(msg: WhatsAppMessage) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                whatsAppDao.delete(msg.id)
+            }
+            loadRecentWhatsAppMessages()
         }
     }
 
@@ -453,6 +497,12 @@ class DaybookViewModel(
             return
         }
         val parsed = NaturalLanguageParser.parse(text, referenceDate = _state.value.today)
+        if (parsed.intent == ParsedIntent.QUERY_SCHEDULE || parsed.intent == ParsedIntent.CONVERSATION) {
+            update { it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null) }
+            openConversation()
+            sendConversationMessage(text)
+            return
+        }
         val guardrail = syncPreferences?.globalAutonomyGuardrail ?: "ALWAYS_ASK"
 
         val canAutoCommit = when (guardrail) {
@@ -509,7 +559,7 @@ class DaybookViewModel(
         it.copy(isListening = false, voiceRetried = false, voiceRetryMessage = null, message = msg)
     }
 
-    private fun commitParsedIntent(text: String, parsed: ParseResult) {
+    fun commitParsedIntent(text: String, parsed: ParseResult) {
         val today = _state.value.today
         when (parsed.intent) {
             ParsedIntent.CREATE_TASK -> {
@@ -558,8 +608,9 @@ class DaybookViewModel(
                     )
                 }
             }
-            ParsedIntent.CONVERSATION -> {
-                // Conversational intent — no item to persist
+            ParsedIntent.CONVERSATION,
+            ParsedIntent.QUERY_SCHEDULE -> {
+                // Conversational intent / schedule query — no item to persist
             }
             ParsedIntent.UNKNOWN -> {
                 // Treat as a plain task so nothing the user says is ever silently lost
@@ -894,6 +945,10 @@ class DaybookViewModel(
                         ?: "Hello! How can I help you manage your day?"
                     reply to listOf("Add task", "Schedule meeting", "New log", "Dismiss")
                 }
+                ParsedIntent.QUERY_SCHEDULE -> {
+                    val summary = buildScheduleSummary(today)
+                    summary to listOf("Add task", "Schedule meeting", "New log", "Dismiss")
+                }
                 ParsedIntent.CREATE_TASK -> {
                     val title = parsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
                     val priorityLabel = when (parsed.priority) {
@@ -1013,6 +1068,10 @@ class DaybookViewModel(
                                             ?: "How can I help you today?"
                                         reply to listOf("Add task", "Schedule meeting", "New log", "Dismiss")
                                     }
+                                    ParsedIntent.QUERY_SCHEDULE -> {
+                                        val summary = buildScheduleSummary(today)
+                                        summary to listOf("Add task", "Schedule meeting", "New log", "Dismiss")
+                                    }
                                     ParsedIntent.CREATE_TASK -> {
                                         val t = llmParsed.taskTitle?.takeIf { it.isNotBlank() } ?: safText
                                         val pl = when (llmParsed.priority) {
@@ -1122,6 +1181,51 @@ class DaybookViewModel(
                 )
             }
         }
+    }
+
+    private fun buildScheduleSummary(today: LocalDate): String {
+        val board = _state.value.board
+        if (board.isEmpty && board.completedToday == 0) {
+            return "Your day is clear today ($today). You have no tasks or meetings scheduled."
+        }
+        val parts = mutableListOf<String>()
+        parts.add("Here is your schedule for today ($today):")
+
+        if (board.overdue.isNotEmpty()) {
+            val overdueList = board.overdue.joinToString("\n") { "• [Overdue] ${it.title}${it.dueDate?.let { d -> " (due $d)" } ?: ""}" }
+            parts.add("Overdue tasks (${board.overdue.size}):\n$overdueList")
+        }
+
+        if (board.dueToday.isNotEmpty()) {
+            val dueList = board.dueToday.joinToString("\n") { "• ${it.title}${if (it.notes.isNotBlank()) " - ${it.notes.take(50)}" else ""}" }
+            parts.add("Due today (${board.dueToday.size}):\n$dueList")
+        }
+
+        if (board.inProgress.isNotEmpty()) {
+            val inProgList = board.inProgress.joinToString("\n") { "• [In Progress] ${it.title}" }
+            parts.add("In progress (${board.inProgress.size}):\n$inProgList")
+        }
+
+        if (board.meetings.isNotEmpty()) {
+            val meetingList = board.meetings.joinToString("\n") { "• ${it.title}${it.startTime?.let { s -> " at $s" } ?: ""}${if (it.location.isNotBlank()) " (${it.location})" else ""}" }
+            parts.add("Meetings (${board.meetings.size}):\n$meetingList")
+        }
+
+        if (board.suggestions.isNotEmpty()) {
+            val suggestionList = board.suggestions.joinToString("\n") { "• ${it.body}" }
+            parts.add("Reminders & Suggestions (${board.suggestions.size}):\n$suggestionList")
+        }
+
+        if (board.log.isNotEmpty()) {
+            val logList = board.log.joinToString("\n") { "• [${it.kind.name}] ${it.body}" }
+            parts.add("Today's Daily Log (${board.log.size}):\n$logList")
+        }
+
+        if (board.completedToday > 0) {
+            parts.add("Completed today: ${board.completedToday} task${if (board.completedToday == 1) "" else "s"}.")
+        }
+
+        return parts.joinToString("\n\n")
     }
 
     /**
@@ -1411,6 +1515,63 @@ class DaybookViewModel(
         }
     }
 
+    /** Converts a WhatsApp message explicitly into a Task, preserving source notes. */
+    fun convertWhatsAppToTask(msg: WhatsAppMessage) {
+        val today = _state.value.today
+        val parsed = NaturalLanguageParser.parse(msg.message, today)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                whatsAppDao.delete(msg.id)
+            }
+            val title = parsed.taskTitle?.ifBlank { null } ?: "${msg.sender}: ${msg.message.take(60)}"
+            val task = Task(
+                title = title,
+                notes = "Source: WhatsApp from ${msg.sender}\n\n${msg.message}",
+                priority = parsed.priority,
+                dueDate = parsed.dueDate ?: today,
+                project = "WhatsApp",
+            )
+            write {
+                val savedId = repository.saveTask(task)
+                if (task.dueDate != null) {
+                    com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleTaskReminder(
+                        context = repository.database.context,
+                        task = task.copy(id = savedId),
+                    )
+                }
+            }
+            loadRecentWhatsAppMessages()
+        }
+    }
+
+    /** Converts a WhatsApp message explicitly into a Meeting, preserving source notes. */
+    fun convertWhatsAppToMeeting(msg: WhatsAppMessage) {
+        val today = _state.value.today
+        val parsed = NaturalLanguageParser.parse(msg.message, today)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                whatsAppDao.delete(msg.id)
+            }
+            val day = parsed.dueDate ?: today
+            val title = parsed.meetingTitle?.ifBlank { null } ?: "Meeting with ${msg.sender}"
+            val meeting = Meeting(
+                title = title,
+                attendees = msg.sender,
+                day = day,
+                startTime = parsed.meetingTime,
+                notes = "Source: WhatsApp from ${msg.sender}\n\n${msg.message}",
+            )
+            write {
+                val savedId = repository.saveMeeting(meeting)
+                com.sr2ma.daybook.notifications.ReminderNotificationManager.scheduleMeetingReminder(
+                    context = repository.database.context,
+                    meeting = meeting.copy(id = savedId),
+                )
+            }
+            loadRecentWhatsAppMessages()
+        }
+    }
+
     /**
      * Converts a WhatsApp message into a Task or Meeting using NLP.
      */
@@ -1421,6 +1582,7 @@ class DaybookViewModel(
             withContext(Dispatchers.IO) {
                 whatsAppDao.delete(msg.id)
             }
+            val notes = "Source: WhatsApp from ${msg.sender}\n\n${msg.message}"
             when (parsed.intent) {
                 ParsedIntent.CREATE_MEETING -> {
                     val day = parsed.dueDate ?: today
@@ -1430,6 +1592,7 @@ class DaybookViewModel(
                         attendees = msg.sender,
                         day = day,
                         startTime = parsed.meetingTime,
+                        notes = notes,
                     )
                     write {
                         val savedId = repository.saveMeeting(meeting)
@@ -1448,9 +1611,10 @@ class DaybookViewModel(
                     }
                 }
                 else -> {
-                    val title = parsed.taskTitle?.ifBlank { null } ?: "${msg.sender}: ${msg.message}"
+                    val title = parsed.taskTitle?.ifBlank { null } ?: "${msg.sender}: ${msg.message.take(60)}"
                     val task = Task(
                         title = title,
+                        notes = notes,
                         priority = parsed.priority,
                         dueDate = parsed.dueDate ?: today,
                         project = "WhatsApp",

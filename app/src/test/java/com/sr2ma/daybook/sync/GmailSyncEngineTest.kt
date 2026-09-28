@@ -85,4 +85,62 @@ class GmailSyncEngineTest {
         )
         assertNull(noAction)
     }
+
+    @Test
+    fun `extractTopics extracts topics and subtopics from tags and subjects`() {
+        val topics = GmailSyncEngine.extractTopics(
+            subject = "[Project/Mobile] Fix login crash #bug/auth",
+            snippet = "Review the latest stacktrace for the auth flow.",
+        )
+        assertTrue(topics.any { it.contains("Project/Mobile", ignoreCase = true) })
+        assertTrue(topics.any { it.contains("bug/auth", ignoreCase = true) })
+    }
+
+    @Test
+    fun `extractLocation detects video and physical meeting locations`() {
+        val locZoom = GmailSyncEngine.extractLocation("Sync call", "Join Zoom meeting at zoom.us/j/123456")
+        assertEquals("Zoom", locZoom)
+
+        val locMeet = GmailSyncEngine.extractLocation("Sprint Planning", "Video call link: https://meet.google.com/abc-defg-hij")
+        assertEquals("Google Meet", locMeet)
+
+        val locRoom = GmailSyncEngine.extractLocation("Design Session", "Let's meet in Room 302 on the third floor.")
+        assertEquals("Room 302", locRoom)
+    }
+
+    @Test
+    fun `extractDateTime correctly extracts due date and meeting time`() {
+        val today = LocalDate.of(2026, 9, 28)
+        val (date, time) = GmailSyncEngine.extractDateTime(
+            subject = "Meeting tomorrow at 3pm",
+            snippet = "Discuss quarterly roadmap.",
+            referenceDate = today,
+        )
+        assertEquals(today.plusDays(1), date)
+        assertEquals(java.time.LocalTime.of(15, 0), time)
+    }
+
+    @Test
+    fun `buildTaskNotes preserves rich metadata and message ID`() {
+        val msg = GmailMessage(
+            id = 42L,
+            messageId = "msg_abc123",
+            sender = "alice@example.com",
+            subject = "Quarterly Sync",
+            snippet = "Please prepare the slide deck.",
+            receivedAt = System.currentTimeMillis(),
+        )
+        val notes = GmailSyncEngine.buildTaskNotes(
+            msg = msg,
+            topics = listOf("Finance/Budget"),
+            location = "Zoom",
+            dateTimeStr = "15:00",
+        )
+        assertTrue(notes.contains("Source: Email from alice@example.com [msgId:msg_abc123]"))
+        assertTrue(notes.contains("Subject: Quarterly Sync"))
+        assertTrue(notes.contains("Topics: Finance/Budget"))
+        assertTrue(notes.contains("Location: Zoom"))
+        assertTrue(notes.contains("Time: 15:00"))
+        assertTrue(notes.contains("Please prepare the slide deck."))
+    }
 }

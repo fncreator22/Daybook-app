@@ -1,9 +1,14 @@
 package com.sr2ma.daybook.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,8 +31,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,35 +44,50 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.Dates
-import com.sr2ma.daybook.domain.model.Meeting
+import com.sr2ma.daybook.domain.model.GmailMessage
+import com.sr2ma.daybook.sync.GmailSyncEngine
 import java.time.LocalDate
 
 /**
- * Dedicated read-only "Meeting Card" presentation sheet.
+ * Dedicated read-only "Email Details" presentation sheet.
  *
- * Shown when tapping a meeting row on the Today dashboard or Meetings screen so the user
- * is presented with a clean presentation card with overflow actions rather than
- * immediately entering edit form fields.
+ * Shown when tapping an email message card on the Today dashboard.
+ * Presents all parsed details (sender, subject, extracted topics, subtopics,
+ * location, date/time, full body snippet) with overflow actions (+ Add Task,
+ * + Add Meeting, Open Gmail, Dismiss/Remove) without dropping straight into
+ * an editable form.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun MeetingCardSheet(
-    meeting: Meeting,
+fun GmailCardSheet(
+    message: GmailMessage,
     today: LocalDate,
-    onEdit: (Meeting) -> Unit,
-    onToggleFollowUp: ((Meeting) -> Unit)? = null,
-    onDelete: ((Meeting) -> Unit)? = null,
+    onAddTask: (GmailMessage) -> Unit,
+    onAddMeeting: (GmailMessage) -> Unit,
+    onDismissMessage: (GmailMessage) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showMenu by remember { mutableStateOf(false) }
+
+    val topics = remember(message.subject, message.snippet) {
+        GmailSyncEngine.extractTopics(message.subject, message.snippet)
+    }
+    val location = remember(message.subject, message.snippet) {
+        GmailSyncEngine.extractLocation(message.subject, message.snippet)
+    }
+    val (extractedDate, extractedTime) = remember(message.subject, message.snippet, today) {
+        GmailSyncEngine.extractDateTime(message.subject, message.snippet, today)
+    }
+    val isActioned = message.actionedAt != null
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -87,26 +109,27 @@ fun MeetingCardSheet(
             ) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    color = when {
+                        isActioned -> Color(0xFFE6F4EA)
+                        message.suggestedAction != null -> MaterialTheme.colorScheme.secondaryContainer
+                        else -> MaterialTheme.colorScheme.primaryContainer
+                    },
                 ) {
-                    Row(
+                    Text(
+                        text = when {
+                            isActioned -> "ADDED TO DAYBOOK"
+                            message.suggestedAction != null -> "ACTION DETECTED"
+                            else -> "EMAIL SUGGESTION"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            isActioned -> Color(0xFF137333)
+                            message.suggestedAction != null -> MaterialTheme.colorScheme.onSecondaryContainer
+                            else -> MaterialTheme.colorScheme.onPrimaryContainer
+                        },
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_meetings),
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                        Text(
-                            text = if (meeting.day == today) "TODAY'S MEETING" else "UPCOMING MEETING",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
+                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,38 +145,59 @@ fun MeetingCardSheet(
                             onDismissRequest = { showMenu = false },
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Edit Meeting") },
+                                text = { Text("+ Add as Task") },
                                 onClick = {
                                     showMenu = false
                                     onDismiss()
-                                    onEdit(meeting)
+                                    onAddTask(message)
                                 }
                             )
-                            if (onDelete != null) {
-                                DropdownMenuItem(
-                                    text = { Text("Delete Meeting", color = MaterialTheme.colorScheme.error) },
-                                    leadingIcon = {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_delete),
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        onDismiss()
-                                        onDelete(meeting)
+                            DropdownMenuItem(
+                                text = { Text("+ Add as Meeting") },
+                                onClick = {
+                                    showMenu = false
+                                    onDismiss()
+                                    onAddMeeting(message)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Open in Gmail") },
+                                onClick = {
+                                    showMenu = false
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse("https://mail.google.com")
+                                        setPackage("com.google.android.gm")
                                     }
-                                )
-                            }
+                                    try {
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://mail.google.com")))
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Remove from Dashboard", color = MaterialTheme.colorScheme.error) },
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_delete),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onDismiss()
+                                    onDismissMessage(message)
+                                }
+                            )
                         }
                     }
 
                     IconButton(onClick = onDismiss) {
                         Icon(
                             painter = painterResource(R.drawable.ic_close),
-                            contentDescription = stringResource(R.string.action_cancel),
+                            contentDescription = "Close",
                         )
                     }
                 }
@@ -161,7 +205,7 @@ fun MeetingCardSheet(
 
             Spacer(Modifier.height(14.dp))
 
-            // ── Meeting Presentation Card ───────────────────────────────────────
+            // ── Email Presentation Card ──────────────────────────────────────
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -180,9 +224,8 @@ fun MeetingCardSheet(
                         .fillMaxWidth()
                         .padding(20.dp),
                 ) {
-                    // Meeting Title
                     Text(
-                        text = meeting.title.ifBlank { "Untitled Meeting" },
+                        text = message.subject.ifBlank { "No Subject" },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -190,7 +233,7 @@ fun MeetingCardSheet(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // Timing Row
+                    // Sender
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -202,7 +245,7 @@ fun MeetingCardSheet(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_clock),
+                                    painter = painterResource(R.drawable.ic_today),
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -211,14 +254,12 @@ fun MeetingCardSheet(
                         }
                         Column {
                             Text(
-                                text = "Date & Time",
+                                text = "From",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            val timeStr = meeting.startTime?.let { " at $it" } ?: ""
-                            val dateStr = "${Dates.weekdayLong(meeting.day)}, ${meeting.day.dayOfMonth} ${meeting.day.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${meeting.day.year}"
                             Text(
-                                text = "$dateStr$timeStr",
+                                text = message.sender,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -226,9 +267,9 @@ fun MeetingCardSheet(
                         }
                     }
 
-                    // Location
-                    if (meeting.location.isNotBlank()) {
-                        Spacer(Modifier.height(14.dp))
+                    // Extracted Date / Time
+                    if (extractedDate != null || extractedTime != null) {
+                        Spacer(Modifier.height(12.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -240,7 +281,7 @@ fun MeetingCardSheet(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        painter = painterResource(R.drawable.ic_meetings),
+                                        painter = painterResource(R.drawable.ic_clock),
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp),
                                         tint = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -249,25 +290,27 @@ fun MeetingCardSheet(
                             }
                             Column {
                                 Text(
-                                    text = "Location / Link",
+                                    text = "Detected Schedule",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                val datePart = extractedDate?.let { Dates.shortLabel(it, today) } ?: ""
+                                val timePart = extractedTime?.let { " at $it" } ?: ""
                                 Text(
-                                    text = meeting.location,
+                                    text = "$datePart$timePart".trim(),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                         }
                     }
 
-                    // Attendees
-                    if (meeting.attendeeList.isNotEmpty()) {
-                        Spacer(Modifier.height(14.dp))
+                    // Extracted Location
+                    if (!location.isNullOrBlank()) {
+                        Spacer(Modifier.height(12.dp))
                         Row(
-                            verticalAlignment = Alignment.Top,
+                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Surface(
@@ -277,7 +320,7 @@ fun MeetingCardSheet(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        painter = painterResource(R.drawable.ic_today),
+                                        painter = painterResource(R.drawable.ic_meetings),
                                         contentDescription = null,
                                         modifier = Modifier.size(18.dp),
                                         tint = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -286,22 +329,46 @@ fun MeetingCardSheet(
                             }
                             Column {
                                 Text(
-                                    text = "Attendees (${meeting.attendeeList.size})",
+                                    text = "Location / Platform",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Text(
-                                    text = meeting.attendeeList.joinToString(", "),
+                                    text = location,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                         }
                     }
 
-                    // Notes / Agenda
-                    if (meeting.notes.isNotBlank()) {
+                    // Extracted Topics & Subtopics
+                    if (topics.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Column {
+                            Text(
+                                text = "Topics & Tags",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                topics.forEach { topic ->
+                                    SuggestionChip(
+                                        onClick = {},
+                                        label = { Text(topic, style = MaterialTheme.typography.labelSmall) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Full Message Snippet / Body
+                    if (message.snippet.isNotBlank()) {
                         Spacer(Modifier.height(14.dp))
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 4.dp),
@@ -309,86 +376,81 @@ fun MeetingCardSheet(
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "AGENDA & NOTES",
+                            text = "EMAIL BODY & SNIPPET",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
                             letterSpacing = 1.sp,
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            text = meeting.notes,
+                            text = message.snippet,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                    }
-
-                    // Follow-Up Section
-                    if (meeting.nextTouch != null) {
-                        Spacer(Modifier.height(14.dp))
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (meeting.followUpDone) Color(0xFFE6F4EA) else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (meeting.followUpDone) "FOLLOW-UP COMPLETED" else "FOLLOW-UP SCHEDULED",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (meeting.followUpDone) Color(0xFF137333) else MaterialTheme.colorScheme.primary,
-                                    )
-                                    Text(
-                                        text = "Touch base on ${Dates.shortLabel(meeting.nextTouch, today)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(top = 2.dp),
-                                    )
-                                }
-                                if (onToggleFollowUp != null) {
-                                    OutlinedButton(
-                                        onClick = { onToggleFollowUp(meeting) },
-                                        shape = RoundedCornerShape(8.dp),
-                                    ) {
-                                        Text(if (meeting.followUpDone) "Undo" else "Mark Done")
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
+            // Action Buttons
+            if (!isActioned) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Close")
-                }
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            onAddTask(message)
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("+ Add Task")
+                    }
 
-                Button(
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onAddMeeting(message)
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("+ Add Meeting")
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(
                     onClick = {
                         onDismiss()
-                        onEdit(meeting)
+                        onDismissMessage(message)
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Edit Meeting")
+                    Text("Dismiss Suggestion", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            onDismissMessage(message)
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Remove from Dashboard")
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Done")
+                    }
                 }
             }
         }

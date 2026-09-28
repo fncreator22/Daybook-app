@@ -42,6 +42,7 @@ class SyncManager(
         authClient.signOut()
         // Cancel all sync workers when signed out.
         DriveBackupWorker.cancelDaily(context)
+        GmailSyncWorker.cancelPeriodic(context)
     }
 
     // ── Feature toggles ──────────────────────────────────────────────────────
@@ -101,6 +102,11 @@ class SyncManager(
     /** Enables or disables Gmail sync. */
     fun setGmailSync(enabled: Boolean) {
         syncPrefs.gmailSync = enabled
+        if (enabled) {
+            GmailSyncWorker.schedulePeriodic(context)
+        } else {
+            GmailSyncWorker.cancelPeriodic(context)
+        }
     }
 
     /** Triggers on-demand Gmail sync and action extraction. */

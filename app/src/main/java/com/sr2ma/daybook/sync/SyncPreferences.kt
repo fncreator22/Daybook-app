@@ -213,6 +213,10 @@ class SyncPreferences(
         get() = prefs.getBoolean(KEY_SAMPLE_GMAIL_CLEARED, false)
         set(value) = prefs.edit().putBoolean(KEY_SAMPLE_GMAIL_CLEARED, value).apply()
 
+    var lastGmailSyncDiffSummary: String?
+        get() = prefs.getString("key_last_gmail_diff_summary", null)
+        set(value) = prefs.edit().putString("key_last_gmail_diff_summary", value).apply()
+
     // ── Sign-out ──────────────────────────────────────────────────────────────
 
     /**

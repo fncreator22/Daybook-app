@@ -14,11 +14,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.sr2ma.daybook.R
 import com.sr2ma.daybook.domain.MeetingFilter
+import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.ui.DaybookUiState
 import com.sr2ma.daybook.ui.DaybookViewModel
 import com.sr2ma.daybook.ui.components.EmptyState
@@ -43,6 +48,28 @@ fun MeetingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    var viewingMeeting by remember { mutableStateOf<Meeting?>(null) }
+
+    val currentMeeting = viewingMeeting?.let { vm -> state.meetings.find { it.id == vm.id } ?: vm }
+    currentMeeting?.let { meeting ->
+        MeetingCardSheet(
+            meeting = meeting,
+            today = state.today,
+            onEdit = { meetingToEdit ->
+                viewingMeeting = null
+                viewModel.editMeeting(meetingToEdit)
+            },
+            onDelete = { meetingToDelete ->
+                viewingMeeting = null
+                viewModel.deleteMeeting(meetingToDelete)
+            },
+            onToggleFollowUp = { meetingToToggle ->
+                viewModel.toggleFollowUpDone(meetingToToggle)
+            },
+            onDismiss = { viewingMeeting = null },
+        )
+    }
+
     // Upcoming and Past are sorted in opposite directions, so a scroll position
     // carried across a filter change points at something unrelated — and on a
     // shorter list it lands past the end, which reads as an empty screen. Not
@@ -92,7 +119,7 @@ fun MeetingsScreen(
                     MeetingRow(
                         meeting = meeting,
                         today = state.today,
-                        onClick = { viewModel.editMeeting(meeting) },
+                        onClick = { viewingMeeting = meeting },
                         onToggleFollowUp = { viewModel.toggleFollowUpDone(meeting) },
                     )
                 }

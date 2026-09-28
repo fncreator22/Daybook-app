@@ -33,11 +33,7 @@ class NetworkTracker(
 
     init {
         try {
-            val request = NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .build()
-
-            connectivityManager?.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
+            connectivityManager?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     _isConnected.value = true
                     _connectionType.value = getNetworkTypeName()

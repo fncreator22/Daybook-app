@@ -40,15 +40,20 @@ object ReminderNotificationManager {
                 ).apply {
                     description = context.getString(R.string.notif_channel_reminders_desc)
                     enableVibration(true)
+                    enableLights(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
             )
             nm.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_INGESTION,
                     "Daybook Ingestion Alerts",
-                    NotificationManager.IMPORTANCE_DEFAULT,
+                    NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     description = "Alerts for actionable items detected from Gmail or WhatsApp"
+                    enableVibration(true)
+                    enableLights(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
             )
         }
@@ -61,10 +66,11 @@ object ReminderNotificationManager {
         val dueDate = task.dueDate ?: return
         val zone = ZoneId.systemDefault()
         val now = LocalDateTime.now(zone)
-        var targetDateTime = LocalDateTime.of(dueDate, LocalTime.of(9, 0))
+        val reminderTime = extractTaskTime(task.title, task.notes) ?: LocalTime.of(9, 0)
+        var targetDateTime = LocalDateTime.of(dueDate, reminderTime)
         if (targetDateTime.isBefore(now)) {
             if (dueDate == LocalDate.now(zone)) {
-                targetDateTime = now.plusHours(1)
+                targetDateTime = now.plusMinutes(15)
             } else {
                 return
             }
@@ -116,10 +122,14 @@ object ReminderNotificationManager {
         val time = meeting.startTime ?: LocalTime.of(10, 0)
         val zone = ZoneId.systemDefault()
         val meetingDateTime = LocalDateTime.of(date, time)
-        val reminderDateTime = meetingDateTime.minusMinutes(15)
+        var reminderDateTime = meetingDateTime.minusMinutes(15)
         val now = LocalDateTime.now(zone)
         if (reminderDateTime.isBefore(now)) {
-            return
+            if (meetingDateTime.isAfter(now)) {
+                reminderDateTime = now.plusMinutes(1)
+            } else {
+                return
+            }
         }
 
         val triggerMillis = reminderDateTime.atZone(zone).toInstant().toEpochMilli()
@@ -161,6 +171,18 @@ object ReminderNotificationManager {
         }
     }
 
+    private fun extractTaskTime(title: String, notes: String): LocalTime? {
+        val timeLine = notes.lines().find { it.startsWith("Time:", ignoreCase = true) }
+        if (timeLine != null) {
+            val raw = timeLine.removePrefix("Time:").removePrefix("time:").trim()
+            try {
+                return LocalTime.parse(raw)
+            } catch (_: Throwable) {}
+            com.sr2ma.daybook.domain.NaturalLanguageParser.extractTime(raw.lowercase())?.let { return it }
+        }
+        return com.sr2ma.daybook.domain.NaturalLanguageParser.extractTime(title.lowercase())
+    }
+
     private fun scheduleAlarm(context: Context, triggerMillis: Long, pendingIntent: PendingIntent) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         try {
@@ -176,7 +198,11 @@ object ReminderNotificationManager {
                 alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
             }
         } catch (_: SecurityException) {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            try {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+            // Defensive catch for OEM-specific AlarmManager anomalies
         }
     }
 }

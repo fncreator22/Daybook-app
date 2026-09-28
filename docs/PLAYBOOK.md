@@ -1,4 +1,4 @@
-﻿# Daybook — Agent Playbook
+# Daybook — Agent Playbook
 
 > **Purpose**: Read at the start of every session. Update at end of every task.
 > Never orphan files without recording them here.
@@ -152,6 +152,82 @@ If fields missing: PassSheet shows with empty fields, user fills manually
 Files: ui/screens/WalletScreen.kt, ui/editors/PassConfirmSheet.kt, domain/PassParser.kt
 Status: DONE
 
+### BUG-003 -- Email Sync Data Loss: Parsed fields discarded [HIGH]
+Symptom: Email action conversion created bare tasks with empty notes, discarding sender, snippet, topics, and meeting locations.
+Root cause: `convertGmailAction` created `Task(title, ...)` with default empty `notes = ""`, discarding snippet and metadata.
+Fix: Added companion extractors `extractTopics`, `extractLocation`, and `buildTaskNotes` in `GmailSyncEngine.kt` to populate `notes`, `project`, and `location` in `Task` and `Meeting`.
+Files: sync/GmailSyncEngine.kt, ui/DaybookViewModel.kt
+Status: DONE
+
+### BUG-004 -- Actioned Dashboard Items Non-Removable [HIGH]
+Symptom: Once an email card action was converted, action buttons disappeared leaving no way to remove it from the Today board. WhatsApp cards lacked a dismiss button.
+Root cause: `TodayScreen.kt` checked `if (msg.suggestedAction != null && msg.actionedAt == null)` and rendered nothing when actioned; `WhatsAppMessageCard` had no dismiss action.
+Fix: Added "Added" chip and "Remove" / "Dismiss" buttons for all email states; added "Dismiss" to `WhatsAppMessageCard` wired to `dismissWhatsAppMessage` in `DaybookViewModel`.
+Files: ui/screens/TodayScreen.kt, ui/DaybookViewModel.kt
+Status: DONE
+
+### BUG-005 -- Tapping items opens edit form directly instead of Details viewer [MEDIUM]
+Symptom: Tapping task or meeting rows opened the editable form sheet directly, risking accidental edits and hiding detailed parsed context.
+Root cause: `onClick` on task and meeting rows called `viewModel.editTask` / `viewModel.editMeeting` directly.
+Fix: Tapping task/meeting rows in Today, Tasks, and Meetings screens opens read-only `TaskCardSheet` or `MeetingCardSheet` displaying all parsed fields (notes, topics, location, time, cadence) and a 3-dot overflow menu for Edit and Delete.
+Files: ui/screens/TaskCardSheet.kt, ui/screens/MeetingCardSheet.kt, ui/screens/TodayScreen.kt, ui/screens/TasksScreen.kt, ui/screens/MeetingsScreen.kt
+Status: DONE
+
+### BUG-006 -- Mobile Reminders & Notifications Not Firing [HIGH]
+Symptom: App never displayed reminder or sync notifications in the system status shade.
+Root cause: `POST_NOTIFICATIONS` was in manifest but never requested at runtime on Android 13+ (API 33+); notification channels lacked high-importance visibility; exact alarm scheduling lacked fallback for same-day overdue reminders.
+Fix: Added runtime `POST_NOTIFICATIONS` permission launcher in `MainActivity.kt`; initialized high-importance channels with public lockscreen visibility; scheduled same-day overdue fallback reminders (`now + 15m`).
+Files: MainActivity.kt, notifications/ReminderNotificationManager.kt
+Status: DONE
+
+### BUG-007 -- AI Agent Fails on Schedule & Agenda Queries [HIGH]
+Symptom: Asking conversational questions like "what do I have to do today?" created a new task titled "what do I have to do today" instead of answering with today's schedule.
+Root cause: Rule engine had no pattern for schedule inspection queries, falling through to default `CREATE_TASK`.
+Fix: Added `ParsedIntent.QUERY_SCHEDULE` and regex query matching in `NaturalLanguageParser.kt`; added `buildScheduleSummary(today)` in `DaybookViewModel.kt` formatting tasks, overdue items, meetings, and completed tallies.
+Files: domain/NaturalLanguageParser.kt, ui/DaybookApp.kt, ui/DaybookViewModel.kt
+Status: DONE
+
+### BUG-008 -- Battery Drain & Continuous Network Activity Icon [HIGH]
+Symptom: Continuous network transfer icon in Android status bar and excessive battery drain.
+Root cause: `NetworkTracker` registered an active `NetworkRequest` with `NET_CAPABILITY_INTERNET`, holding physical modem radios awake; HTTP connections in `GmailSyncEngine` lacked `finally { disconnect() }`.
+Fix: Switched `NetworkTracker` to passive `registerDefaultNetworkCallback`; wrapped HTTP requests in `try/finally { conn.disconnect() }`; added `requiresBatteryNotLow` constraint to `DriveBackupWorker`.
+Files: sync/NetworkTracker.kt, sync/GmailSyncEngine.kt, sync/DriveBackupWorker.kt
+Status: DONE
+
+### FEAT-002 -- Periodic Background Gmail Sync & Dynamic WhatsApp Permission Check [MEDIUM]
+Request: Background email sync every 15 minutes without battery drain; dynamic re-check of WhatsApp listener permission after visiting Android Settings.
+Fix: Implemented `GmailSyncWorker` via WorkManager with network and `requiresBatteryNotLow` constraints and sync diff logging in `SyncPreferences`; added `Lifecycle.Event.ON_RESUME` observer in `WhatsAppSettingsSection`.
+Files: sync/GmailSyncWorker.kt, sync/SyncManager.kt, sync/SyncPreferences.kt, whatsapp/WhatsAppSettingsSection.kt
+Status: DONE
+
+### BUG-009 -- Read-Only Detail Presentation Sheets for Emails & WhatsApp Messages [MEDIUM]
+Symptom: Tapping email or WhatsApp message cards toggled raw card expansion instead of opening a comprehensive read-only detail presentation sheet with overflow actions.
+Root cause: `TodayScreen.kt` lacked modal sheet viewers for Gmail and WhatsApp messages.
+Fix: Created `GmailCardSheet` and `WhatsAppCardSheet` displaying all parsed topics, subtopics, detected schedule, location, sender, full body/snippet, and overflow menus (Edit, Delete, + Task, + Meeting, Reply).
+Files: ui/screens/GmailCardSheet.kt, ui/screens/WhatsAppCardSheet.kt, ui/screens/TodayScreen.kt
+Status: DONE
+
+### BUG-010 -- Completed Task Tap Regressed to Status Toggle [MEDIUM]
+Symptom: Tapping a task in the "Completed Today" list toggled the task back to incomplete rather than opening its details sheet.
+Root cause: `completedTodaySection` ignored `onTaskClick` parameter and passed `onClick = { viewModel.toggleTaskDone(task) }`.
+Fix: Wired `onClick` to `onTaskClick?.invoke(task) ?: viewModel.toggleTaskDone(task)` so tapping opens `TaskCardSheet`.
+Files: ui/screens/TodayScreen.kt
+Status: DONE
+
+### BUG-011 -- Dashboard Suggestions Missing Auto-Expiration [HIGH]
+Symptom: Once an email was converted or time elapsed, the suggestion card stayed on the dashboard indefinitely without auto-expiring.
+Root cause: `TodayScreen.kt` passed all `state.recentGmailMessages` without checking if associated tasks completed, meetings elapsed, or 24 hours passed.
+Fix: Filtered `visibleGmailMessages` to auto-expire actioned items whose task is DONE, whose meeting is in the past, or that are >24 hours old; filter out unactioned emails whose detected date is in the past.
+Files: ui/screens/TodayScreen.kt
+Status: DONE
+
+### BUG-012 -- Voice Utterances Forced Single Add Action [MEDIUM]
+Symptom: Voice capture confirmation only allowed a single button, forcing user into unintended actions when intent was ambiguous.
+Root cause: `VoiceResultSheet` had a single Confirm button for non-query results.
+Fix: Enhanced `VoiceResultSheet` with multi-choice options ("+ Task", "+ Meeting", "+ Log", "Ask Assistant", "Dismiss") for ambiguous voice results.
+Files: ui/DaybookApp.kt
+Status: DONE
+
 ---
 
 ## 9. Session Log
@@ -163,6 +239,7 @@ Status: DONE
 | 2026-09-18 | 3 | Security audit: network_security_config, Log removal, backup exclusions, versionCode 1->2 |
 | 2026-09-18 | 4 | Mic fixes (API guard, fallback), Google auth placeholder, privacy string |
 | 2026-09-19/21 | 5 | DONE: BUG-001 mojibake, BUG-002 mic immediate stop, FEAT-001 wallet image upload (commit 210d352) |
+| 2026-09-28 | 6 | DONE: BUG-003 to BUG-012: rich metadata extraction, read-only sheets with overflow menus (GmailCardSheet, WhatsAppCardSheet), auto-expiration on dashboard, notifications runtime permission & high importance channels, schedule query AI routing, passive network tracker & background WorkManager sync |
 
 ---
 
@@ -174,4 +251,5 @@ Status: DONE
 4. Check section 5 (DB version -- never regress, always add migration)
 5. Build with section 2 command to confirm baseline green before changes
 6. Update sections 8 and 9 after every task
+
 

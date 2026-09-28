@@ -1,13 +1,21 @@
 package com.sr2ma.daybook
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
+import com.sr2ma.daybook.ai.BriefingNotificationWorker
+import com.sr2ma.daybook.logging.DaybookLogger
+import com.sr2ma.daybook.notifications.ReminderNotificationManager
 import com.sr2ma.daybook.sync.SyncViewModel
 import com.sr2ma.daybook.ui.DaybookApp
 import com.sr2ma.daybook.ui.DaybookViewModel
@@ -20,6 +28,15 @@ import com.sr2ma.daybook.ui.theme.DaybookTheme
  * the ViewModel from the container, go edge to edge, and hand over.
  */
 class MainActivity : ComponentActivity() {
+
+    private val requestNotificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                DaybookLogger.i(this, "MainActivity", "POST_NOTIFICATIONS granted")
+            } else {
+                DaybookLogger.w(this, "MainActivity", "POST_NOTIFICATIONS not granted by user")
+            }
+        }
 
     private val viewModel: DaybookViewModel by viewModels {
         val container = (application as DaybookApplication).container
@@ -50,6 +67,18 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.BLACK),
         )
         super.onCreate(savedInstanceState)
+
+        // Ensure notification channels exist before any notification is posted
+        BriefingNotificationWorker.createChannels(this)
+        ReminderNotificationManager.initChannels(this)
+
+        // Request runtime notification permission on Android 13+ (API 33+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         setContent {
             DaybookTheme {
                 DaybookApp(viewModel, syncViewModel)
