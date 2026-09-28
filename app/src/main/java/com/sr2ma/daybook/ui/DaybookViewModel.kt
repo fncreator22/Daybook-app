@@ -25,6 +25,7 @@ import com.sr2ma.daybook.domain.model.LogEntry
 import com.sr2ma.daybook.domain.model.LogKind
 import com.sr2ma.daybook.domain.model.Meeting
 import com.sr2ma.daybook.domain.model.Pass
+import com.sr2ma.daybook.domain.model.PassCategory
 import com.sr2ma.daybook.domain.model.Task
 import com.sr2ma.daybook.domain.ScanResult
 import com.sr2ma.daybook.ai.LlmEngine
@@ -146,7 +147,14 @@ class DaybookViewModel(
     /** Refresh recent actionable or primary Gmail messages shown in the Today board. */
     fun loadRecentGmailMessages() {
         viewModelScope.launch {
-            val msgs = withContext(Dispatchers.IO) { gmailDao.recentMessages(15, filterSpamAndPromo = true) }
+            val msgs = withContext(Dispatchers.IO) {
+                val raw = gmailDao.recentMessages(15, filterSpamAndPromo = true)
+                if (syncPreferences?.demoDataEnabled == true) {
+                    raw
+                } else {
+                    raw.filterNot { it.messageId.startsWith("offline_") }
+                }
+            }
             update { it.copy(recentGmailMessages = msgs) }
         }
     }
@@ -215,6 +223,41 @@ class DaybookViewModel(
                     context = repository.database.context,
                     meeting = meeting.copy(id = savedId),
                 )
+            }
+            loadRecentGmailMessages()
+            update { it.copy(message = nextMessage(R.string.gmail_action_converted)) }
+        }
+    }
+
+    /** Converts an email message into a Daily Log entry. */
+    fun convertGmailToLog(msg: GmailMessage) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                gmailDao.markActioned(msg.id)
+                val body = "Email from ${msg.sender}: ${msg.subject}\n\n${msg.snippet}"
+                repository.saveLogEntry(
+                    LogEntry(day = _state.value.today, body = body, kind = LogKind.NOTE)
+                )
+            }
+            loadRecentGmailMessages()
+            update { it.copy(message = nextMessage(R.string.gmail_action_converted)) }
+        }
+    }
+
+    /** Converts an email message into a Pass / Wallet card. */
+    fun convertGmailToWallet(msg: GmailMessage) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                gmailDao.markActioned(msg.id)
+                val pass = Pass(
+                    title = msg.subject.ifBlank { "Pass from ${msg.sender}" },
+                    category = PassCategory.OTHER,
+                    barcodeValue = msg.messageId,
+                    barcodeFormat = "CODE_128",
+                    ocrText = msg.snippet,
+                    notes = "Imported from email: ${msg.sender}\n${msg.snippet}",
+                )
+                repository.savePass(pass)
             }
             loadRecentGmailMessages()
             update { it.copy(message = nextMessage(R.string.gmail_action_converted)) }
@@ -1632,9 +1675,50 @@ class DaybookViewModel(
         }
     }
 
+    /** Converts a WhatsApp message explicitly into a Log entry. */
+    fun convertWhatsAppToLog(msg: WhatsAppMessage) {
+        val today = _state.value.today
+        val parsed = NaturalLanguageParser.parse(msg.message, today)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                whatsAppDao.delete(msg.id)
+            }
+            val body = parsed.logBody?.ifBlank { null } ?: "WhatsApp from ${msg.sender}: ${msg.message}"
+            write {
+                repository.saveLogEntry(
+                    LogEntry(day = today, body = body, kind = parsed.logKind)
+                )
+            }
+            loadRecentWhatsAppMessages()
+        }
+    }
+
+    /** Converts a WhatsApp message explicitly into a Wallet pass. */
+    fun convertWhatsAppToWallet(msg: WhatsAppMessage) {
+        val today = _state.value.today
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                whatsAppDao.delete(msg.id)
+            }
+            val pass = Pass(
+                title = "Pass from ${msg.sender}",
+                category = PassCategory.OTHER,
+                barcodeValue = "wa_${msg.id}_${msg.receivedAt}",
+                barcodeFormat = "QR_CODE",
+                ocrText = msg.message,
+                notes = "Imported from WhatsApp message from ${msg.sender}:\n${msg.message}",
+            )
+            write {
+                repository.savePass(pass)
+            }
+            loadRecentWhatsAppMessages()
+        }
+    }
+
     /** Clears sample offline Gmail messages from the database. */
     fun clearSampleGmailMessages() {
         syncPreferences?.sampleGmailCleared = true
+        syncPreferences?.demoDataEnabled = false
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 repository.database.writableDatabase.delete(
@@ -1643,6 +1727,17 @@ class DaybookViewModel(
                     null
                 )
             }
+            loadRecentGmailMessages()
+        }
+    }
+
+    /** Toggles demo / sample data generation. */
+    fun setDemoDataEnabled(enabled: Boolean) {
+        syncPreferences?.demoDataEnabled = enabled
+        if (!enabled) {
+            clearSampleGmailMessages()
+        } else {
+            syncPreferences?.sampleGmailCleared = false
             loadRecentGmailMessages()
         }
     }

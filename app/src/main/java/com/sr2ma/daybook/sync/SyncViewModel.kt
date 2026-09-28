@@ -45,6 +45,7 @@ class SyncViewModel(
             gmailFilterSpam = prefs.gmailFilterSpam,
             gmailFilterMarketing = prefs.gmailFilterMarketing,
             lastGmailSyncAt = prefs.lastGmailSyncAt,
+            demoDataEnabled = prefs.demoDataEnabled,
             globalAutonomyGuardrail = prefs.globalAutonomyGuardrail,
             isOnline = syncManager.networkTracker.isConnected.value,
             connectionType = syncManager.networkTracker.connectionType.value,
@@ -273,6 +274,16 @@ class SyncViewModel(
         _state.value = _state.value.copy(backupEnqueued = false)
     }
 
+    fun setDemoDataEnabled(enabled: Boolean) {
+        syncManager.syncPrefs.demoDataEnabled = enabled
+        if (!enabled) {
+            syncManager.syncPrefs.sampleGmailCleared = true
+        } else {
+            syncManager.syncPrefs.sampleGmailCleared = false
+        }
+        _state.value = _state.value.copy(demoDataEnabled = enabled)
+    }
+
     companion object {
         fun factory(syncManager: SyncManager): ViewModelProvider.Factory = viewModelFactory {
             initializer { SyncViewModel(syncManager) }
@@ -297,6 +308,7 @@ data class SyncUiState(
     val lastCalendarSyncAt: Long = 0L,
     val lastDriveBackupAt: Long = 0L,
     val lastGmailSyncAt: Long = 0L,
+    val demoDataEnabled: Boolean = false,
     val busy: Boolean = false,
     val syncEnqueued: Boolean = false,
     val backupEnqueued: Boolean = false,
